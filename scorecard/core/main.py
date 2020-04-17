@@ -3,10 +3,10 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils import check_X_y
 from sklearn.utils.multiclass import type_of_target
-from typing import Union, List
+from typing import Union, List, Tuple
 
 
-class (BaseEstimator, TransformerMixin):
+class ScorecardTransformer(BaseEstimator, TransformerMixin):
     def __init__(self,
                  n_finale: int = 15,
                  verbose: bool = False,
@@ -45,12 +45,14 @@ class (BaseEstimator, TransformerMixin):
         else:
             raise TypeError('X vector is not np array neither data frame')
 
-        X, y = _check_inputs(X, y)
+        # X, y = self._check_inputs(X, y)
+
+        return self
 
 
     def _check_inputs(self,
                       X: Union[pd.DataFrame, np.ndarray],
-                      y: Union[pd.DataFrame, np.ndarray]):
+                      y: Union[pd.DataFrame, np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
         """
         Check input data
         :param X: data matrix
