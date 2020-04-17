@@ -1,1 +1,1 @@
-from scorecard.core.main import ScorecardTransformer
+from scorecard.core.main import WOETransformer

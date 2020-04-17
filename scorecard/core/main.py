@@ -6,7 +6,7 @@ from sklearn.utils.multiclass import type_of_target
 from typing import Union, List, Tuple
 
 
-class ScorecardTransformer(BaseEstimator, TransformerMixin):
+class WOETransformer(BaseEstimator, TransformerMixin):
     def __init__(self,
                  n_finale: int = 15,
                  verbose: bool = False,
@@ -23,7 +23,7 @@ class ScorecardTransformer(BaseEstimator, TransformerMixin):
         self.specials = specials if specials else []
         self.verbose = verbose
 
-        self.WOE_IV_dict = {}
+        self.WOE_IV_dict = {}  # self.transformers
         self.feature_names = []
 
     def fit(self,
@@ -45,7 +45,7 @@ class ScorecardTransformer(BaseEstimator, TransformerMixin):
         else:
             raise TypeError('X vector is not np array neither data frame')
 
-        # X, y = self._check_inputs(X, y)
+        X, y = self._check_inputs(X, y)
 
         return self
 
