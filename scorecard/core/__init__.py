@@ -1,0 +1,1 @@
+from scorecard.core.main import ScorecardTransformer
