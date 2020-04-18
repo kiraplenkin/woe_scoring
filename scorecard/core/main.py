@@ -76,6 +76,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             self.num_features = [feature for feature in X.columns]
 
         print(self.WOE_IV_dict)
+        print(X)
         return self
 
 
