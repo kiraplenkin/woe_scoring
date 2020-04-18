@@ -416,9 +416,18 @@ def cat_feature_bining(df: pd.DataFrame,
                                col=var,
                                target=target,
                                cat=True)[1]
-        min_pcnt_index = regroup[regroup['pcnt'] == regroup['pnct'].min()].index.values[0]
+        min_pcnt_index = regroup[regroup['pcnt'] == regroup['pcnt'].min()].index.values[0]
         if min_pcnt_index == 0:
             new_value = str(str(regroup.iloc[min_pcnt_index, 0]) + ', ' + str(regroup.iloc[min_pcnt_index+1, 0]))
+            df[var] = df[var].apply(lambda x: x if x != regroup.loc[min_pcnt_index, var]
+                                                else regroup.loc[min_pcnt_index-1, var])
+            df[var] = df[var].apply(lambda x: x if x != regroup.loc[min_pcnt_index-1, var]
+                                                else new_value)
+        elif min_pcnt_index == bin_bad_rate(df=df,
+                                            col=var,
+                                            target=target,
+                                            cat=True)[1].shape[0] - 1:
+            new_value = str(str(regroup.iloc[min_pcnt_index-1, 0]) + ', ' + str(regroup.iloc[min_pcnt_index, 0]))
             df[var] = df[var].apply(lambda x: x if x != regroup.loc[min_pcnt_index, var]
                                                 else regroup.loc[min_pcnt_index-1, var])
             df[var] = df[var].apply(lambda x: x if x != regroup.loc[min_pcnt_index-1, var]
