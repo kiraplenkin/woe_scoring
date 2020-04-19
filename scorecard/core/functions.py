@@ -46,7 +46,7 @@ def bin_bad_rate(df: pd.DataFrame,
 def bad_rate_monotone(df: pd.DataFrame,
                       sort_by_var: str,
                       target: str,
-                      special_attribute: List = None,
+                      special_attribute: List = [],
                       cat: bool = False) -> bool:
     
     df2 = df.loc[~df[sort_by_var].isin(special_attribute)]
@@ -145,7 +145,7 @@ def assingn_group(x,
 def split_data(df: pd.DataFrame,
                col: str,
                num_of_split: int,
-               special_attribute: List = None):
+               special_attribute: List = []):
     
     df2 = df.copy()  # try df2 = df[col].copy()
 
@@ -180,7 +180,7 @@ def chi_merge(df: pd.DataFrame,
               target: str,
               max_interval: int,
               initial_max_group: int = 150,
-              special_attribute: List = None,
+              special_attribute: List = [],
               min_bin_pcnt: float = 0.0):
     
     col_levels = sorted(list(set(df[col])))
@@ -203,7 +203,7 @@ def chi_merge(df: pd.DataFrame,
             df2['temp'] = df2[col].map(lambda x: assingn_group(x=x,
                                                                bin=split_x))
         else:
-            df['temp'] = df2[col]
+            df2['temp'] = df2[col]
 
         (binbadrate, regroup, overall_rate) = bin_bad_rate(df=df2,
                                                            col='temp',
