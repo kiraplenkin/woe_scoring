@@ -112,7 +112,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 X[new_bin] = X[feature].apply(lambda x: assign_bin(x=x,
                                                                    cut_off_points=bin,
                                                                    group_intervals=group_intervals))
-            self.WOE_IV_dict[new_bin] = calc_WOE(df=X,
+            self.WOE_IV_dict[feature] = calc_WOE(df=X,
                                                  col=new_bin,
                                                  target='target')
         return self
