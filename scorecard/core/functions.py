@@ -108,7 +108,7 @@ def calc_WOE(df: pd.DataFrame,
     except:
         IV = pd.Series(data=10e-9)
     IV = sum(IV)
-    return {'WOE': WOE_dict, 'IV': IV}
+    return {'WOE': WOE_dict, 'IV': IV, 'Cat': cat}
 
 
 def assign_bin(x: Union[int, float],
