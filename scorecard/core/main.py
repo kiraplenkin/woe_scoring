@@ -58,6 +58,9 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                     self.cat_features.append(self.feature_names[i])
         if len(self.cat_features) > 0:
             self.num_features = [feature for feature in self.feature_names if feature not in self.cat_features]
+            for i, feature in enumerate(self.cat_features):
+                self._print(f'Preparing {feature} feature')
+
         else:
             self.num_features = self.feature_names
 
@@ -82,4 +85,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         return X, y
 
 
- 
+    def _print(self,
+               msg: str):
+        if self.verbose:
+            print(msg)
