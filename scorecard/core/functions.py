@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 
 def _calc_bins(bad_rates: Dict) -> List:
@@ -13,7 +13,7 @@ def calc_bad_rate(X: np.ndarray,
                   y: np.ndarray,
                   feature_idx: int,
                   bins: List,
-                  cat: bool = False) -> (Dict, List):
+                  cat: bool = False) -> Tuple[Dict, List]:
     
     bad_rates = []
     for value in bins:
