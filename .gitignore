@@ -1,5 +1,7 @@
 .vscode/
+.ipynb_checkpoints/
 __pycache__/
 data/
+notebook/
 
 test.py
