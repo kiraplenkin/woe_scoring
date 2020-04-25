@@ -1,9 +1,11 @@
 import pandas as pd
 import numpy as np
+from time import time
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils import check_X_y
 from sklearn.utils.multiclass import type_of_target
 from typing import Union, List, Tuple
+from .functions import cat_bining
 
 
 class WOETransformer(BaseEstimator, TransformerMixin):
@@ -12,6 +14,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                  verbose: bool = False,
                  cat_features: List = None,
                  cat_features_threshold: int = 0,
+                 cat_features_missing_mask: str = 'NaN',
                  specials: List = []):
         """
         Performs the Weight Of Evidence transformation over the input X features using information from y vector.
@@ -49,7 +52,8 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             raise TypeError('X vector is not np array neither data frame')
 
         X, y = self._check_inputs(X, y)
-
+        
+        start_time = time()
         if len(self.cat_features) == 0 and self.cat_features_threshold > 0:
             for i in range(len(self.feature_names)):
                 if type(X[0, i]) == np.dtype('object') \
@@ -58,11 +62,13 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                     self.cat_features.append(self.feature_names[i])
         if len(self.cat_features) > 0:
             self.num_features = [feature for feature in self.feature_names if feature not in self.cat_features]
-            for i, feature in enumerate(self.cat_features):
+            for feature in self.cat_features:
+                feature_idx = list(self.feature_names).index(feature)
                 self._print(f'Preparing {feature} feature')
-
+                self.WOE_IV_dict = cat_bining(X[:, feature_idx], y)
         else:
             self.num_features = self.feature_names
+        print(round(time() - start_time, 4))
 
 
     def _check_inputs(self,
