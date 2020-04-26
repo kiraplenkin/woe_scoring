@@ -11,10 +11,12 @@ from .functions import cat_bining
 class WOETransformer(BaseEstimator, TransformerMixin):
     def __init__(self,
                  n_finale: int = 15,
+                 min_pcnt_group: float = 0.05,
                  verbose: bool = False,
                  cat_features: List = None,
                  cat_features_threshold: int = 0,
                  cat_features_missing_mask: str = 'NaN',
+                 cat_features_temperature: float = 0.005,
                  specials: List = []):
         """
         Performs the Weight Of Evidence transformation over the input X features using information from y vector.
@@ -23,12 +25,15 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         TODO: add n_jobs
         """
         self.n_finale = n_finale
+        self.min_pcnt_group = min_pcnt_group
         self.cat_features = cat_features if cat_features else []
         self.cat_features_threshold = cat_features_threshold
+        self.cat_features_missing_mask = cat_features_missing_mask
+        self.cat_features_temperature = cat_features_temperature
         self.specials = specials if specials else []
         self.verbose = verbose
 
-        self.WOE_IV_dict = {}  # self.transformers
+        self.WOE_IV_dict = []  # self.transformers
         self.feature_names = []
         self.num_features  = []
 
@@ -65,7 +70,14 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             for feature in self.cat_features:
                 feature_idx = list(self.feature_names).index(feature)
                 self._print(f'Preparing {feature} feature')
-                self.WOE_IV_dict = cat_bining(X[:, feature_idx], y)
+                self.WOE_IV_dict.append(
+                    {feature: cat_bining(X=X[:, feature_idx],
+                                         y=y,
+                                         min_pcnt_group=self.min_pcnt_group,
+                                         n_finale=self.n_finale,
+                                         temperature=self.cat_features_temperature,
+                                         mask=self.cat_features_missing_mask)}
+                )
         else:
             self.num_features = self.feature_names
         print(round(time() - start_time, 4))
