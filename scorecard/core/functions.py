@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import chisquare
 from typing import Dict, List, Tuple
 
 
@@ -146,3 +147,15 @@ def _merge_bins_for_min_pcnt(X: np.ndarray,
                                                  bins=bins,
                                                  cat=True)
     return (bad_rates, bins, overall_rate)
+
+
+def _chi2(bad_rates: Dict,
+          overall_rate: float) -> float:
+
+    f_obs = [bin['bad'] for bin in bad_rates]
+    f_exp = [bin['total'] * overall_rate for bin in bad_rates]
+
+    chi2 = chisquare(f_obs=f_obs,
+                     f_exp=f_exp)[0]
+    
+    return chi2
