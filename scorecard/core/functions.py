@@ -11,6 +11,43 @@ def _calc_bins(bad_rates: Dict) -> List:
     return bins
 
 
+def _merge_bins_for_min_pcnt(X: np.ndarray,
+                             y: np.ndarray,
+                             bad_rates: Dict,
+                             bins: List) -> Tuple[Dict, List, float]:
+
+    min_idx = np.argmin([bad_rate['pcnt'] for bad_rate in bad_rates])
+
+    if min_idx == 0:
+        bins[min_idx+1] += bins[min_idx]
+    elif min_idx == len(bad_rates)-1:
+        bins[min_idx-1] += bins[min_idx]
+    else:
+        if np.abs(bad_rates[min_idx]['bad_rate'] - bad_rates[min_idx-1]['bad_rate']) \
+            < np.abs(bad_rates[min_idx]['bad_rate'] - bad_rates[min_idx+1]['bad_rate']):
+            bins[min_idx-1] += bins[min_idx]
+        else:
+            bins[min_idx+1] += bins[min_idx]
+    del bins[min_idx]
+    bad_rates, bins, overall_rate = bin_bad_rate(X=X,
+                                                 y=y,
+                                                 bins=bins,
+                                                 cat=True)
+    return (bad_rates, bins, overall_rate)
+
+
+def _chi2(bad_rates: Dict,
+          overall_rate: float) -> float:
+
+    f_obs = [bin['bad'] for bin in bad_rates]
+    f_exp = [bin['total'] * overall_rate for bin in bad_rates]
+
+    chi2 = chisquare(f_obs=f_obs,
+                     f_exp=f_exp)[0]
+    
+    return chi2
+
+
 def bin_bad_rate(X: np.ndarray,
                  y: np.ndarray,
                  bins: List,
@@ -122,40 +159,3 @@ def bad_rate_monotone(bad_rates: Dict) -> bool:
         return False
     else:
         return True
-
-
-def _merge_bins_for_min_pcnt(X: np.ndarray,
-                             y: np.ndarray,
-                             bad_rates: Dict,
-                             bins: List) -> Tuple[Dict, List, float]:
-
-    min_idx = np.argmin([bad_rate['pcnt'] for bad_rate in bad_rates])
-
-    if min_idx == 0:
-        bins[min_idx+1] += bins[min_idx]
-    elif min_idx == len(bad_rates)-1:
-        bins[min_idx-1] += bins[min_idx]
-    else:
-        if np.abs(bad_rates[min_idx]['bad_rate'] - bad_rates[min_idx-1]['bad_rate']) \
-            < np.abs(bad_rates[min_idx]['bad_rate'] - bad_rates[min_idx+1]['bad_rate']):
-            bins[min_idx-1] += bins[min_idx]
-        else:
-            bins[min_idx+1] += bins[min_idx]
-    del bins[min_idx]
-    bad_rates, bins, overall_rate = bin_bad_rate(X=X,
-                                                 y=y,
-                                                 bins=bins,
-                                                 cat=True)
-    return (bad_rates, bins, overall_rate)
-
-
-def _chi2(bad_rates: Dict,
-          overall_rate: float) -> float:
-
-    f_obs = [bin['bad'] for bin in bad_rates]
-    f_exp = [bin['total'] * overall_rate for bin in bad_rates]
-
-    chi2 = chisquare(f_obs=f_obs,
-                     f_exp=f_exp)[0]
-    
-    return chi2
