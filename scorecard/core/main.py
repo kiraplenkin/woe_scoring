@@ -6,6 +6,7 @@ from sklearn.utils import check_X_y
 from sklearn.utils.multiclass import type_of_target
 from typing import Union, List, Tuple
 from .functions import cat_bining
+from .functions import num_bining
 
 
 class WOETransformer(BaseEstimator, TransformerMixin):
@@ -63,7 +64,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             for i in range(len(self.feature_names)):
                 if type(X[0, i]) == np.dtype('object') \
                     or type(X[0, i]) == np.dtype('str') \
-                    or len(np.unique(X[:, i])) < self.cat_features_threshold:
+                    or len(np.unique(X[:, i][~np.isin(X[:, i], self.cat_features_missing_mask)])) < self.cat_features_threshold:
                     self.cat_features.append(self.feature_names[i])
         if len(self.cat_features) > 0:
             self.num_features = [feature for feature in self.feature_names if feature not in self.cat_features]
@@ -80,6 +81,17 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 )
         else:
             self.num_features = self.feature_names
+
+        for feature in self.num_features:
+            feature_idx = list(self.feature_names).index(feature)
+            self._print(f'Preparing {feature} feature')
+            self.WOE_IV_dict.append(
+                {feature: num_bining(X=X[:, feature_idx],
+                                     y=y,
+                                     min_pcnt_group=self.min_pcnt_group,
+                                     n_finale=self.n_finale,
+                                     mask=self.cat_features_missing_mask)}
+            )
         print(round(time() - start_time, 4))
 
 

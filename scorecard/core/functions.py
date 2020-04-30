@@ -82,7 +82,7 @@ def cat_bining(X: np.ndarray,
                min_pcnt_group: float,
                n_finale: int,
                temperature: float,
-               mask: str):
+               mask: str) -> Dict:
 
     bins = list([bin] for bin in np.unique(X))
     bad_rates, bins, _ = bin_bad_rate(X=X,
@@ -116,7 +116,8 @@ def cat_bining(X: np.ndarray,
         for i in range(len(bad_rates)):
             prop = bad_rates[i]['pcnt'] * bad_rates[i]['bad_rate']
             if prop < temperature:
-                if bad_rates[len(bad_rates)-1]['pcnt'] > bad_rates[len(bad_rates)-2]['pcnt']:
+                if bad_rates[len(bad_rates)-1]['pcnt'] \
+                    > bad_rates[len(bad_rates)-2]['pcnt']:
                     bins[len(bad_rates)-2] += bins[i]
                 else:
                     bins[len(bad_rates)-1] += bins[i]
@@ -142,6 +143,38 @@ def cat_bining(X: np.ndarray,
                                                       bins=bins)
     
     return bad_rates
+
+
+def num_bining(X: np.ndarray,
+               y: np.ndarray,
+               min_pcnt_group: float,
+               n_finale: int,
+               mask: str) -> Dict:
+
+    bins = list([bin] for bin in np.unique(X[~np.isin(X, mask)]))
+    bad_rates, bins, overall_rate = bin_bad_rate(X=X,
+                                                 y=y,
+                                                 bins=bins,
+                                                 cat=False)
+
+    if len(bins) <= 2:
+        return bad_rates
+    else:
+        # while len(bins) > n_finale:
+        chiq_list = []
+        for i in range(len(bad_rates) - 1):
+            temp_bins = bins
+            temp_bins[i] += temp_bins[i+1]
+            del temp_bins[i+1]
+            temp_bad_rates, temp_bins, overall_rate = bin_bad_rate(X=X,
+                                                                   y=y,
+                                                                   bins=temp_bins,
+                                                                   cat=False)
+            chiq_list.append(_chi2(bad_rates=temp_bad_rates,
+                                   overall_rate=overall_rate))
+        print(chiq_list)
+
+        return bad_rates
 
 
 def bad_rate_monotone(bad_rates: Dict) -> bool:
