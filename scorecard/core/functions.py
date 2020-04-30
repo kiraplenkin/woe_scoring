@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 from scipy.stats import chisquare
 from typing import Dict, List, Tuple
@@ -160,19 +161,26 @@ def num_bining(X: np.ndarray,
     if len(bins) <= 2:
         return bad_rates
     else:
-        # while len(bins) > n_finale:
-        chiq_list = []
-        for i in range(len(bad_rates) - 1):
-            temp_bins = bins
-            temp_bins[i] += temp_bins[i+1]
-            del temp_bins[i+1]
-            temp_bad_rates, temp_bins, overall_rate = bin_bad_rate(X=X,
-                                                                   y=y,
-                                                                   bins=temp_bins,
-                                                                   cat=False)
-            chiq_list.append(_chi2(bad_rates=temp_bad_rates,
-                                   overall_rate=overall_rate))
-        print(chiq_list)
+        while len(bins) > n_finale:
+            chiq_list = []
+            for i in range(len(bad_rates) - 1):
+                temp_bins = copy.deepcopy(bins)
+                temp_bins[i] += temp_bins[i+1]
+                del temp_bins[i+1]
+                temp_bad_rates, temp_bins, overall_rate = bin_bad_rate(X=X,
+                                                                       y=y,
+                                                                       bins=temp_bins,
+                                                                       cat=False)
+                chiq_list.append(_chi2(bad_rates=temp_bad_rates,
+                                       overall_rate=overall_rate))
+                del temp_bins
+            best_combined = chiq_list.index(min(chiq_list))
+            bins[best_combined] += bins[best_combined+1]
+            del bins[best_combined+1]
+            bad_rates, bins, overall_rate = bin_bad_rate(X=X,
+                                                         y=y,
+                                                         bins=bins,
+                                                         cat=False)
 
         return bad_rates
 
