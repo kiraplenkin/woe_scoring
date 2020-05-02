@@ -15,7 +15,8 @@ def _calc_bins(bad_rates: Dict) -> List:
 def _merge_bins_for_min_pcnt(X: np.ndarray,
                              y: np.ndarray,
                              bad_rates: Dict,
-                             bins: List) -> Tuple[Dict, List, float]:
+                             bins: List,
+                             cat: bool = False) -> Tuple[Dict, List, float]:
 
     min_idx = np.argmin([bad_rate['pcnt'] for bad_rate in bad_rates])
 
@@ -24,11 +25,40 @@ def _merge_bins_for_min_pcnt(X: np.ndarray,
     elif min_idx == len(bad_rates)-1:
         bins[min_idx-1] += bins[min_idx]
     else:
-        if np.abs(bad_rates[min_idx]['bad_rate'] - bad_rates[min_idx-1]['bad_rate']) \
-            < np.abs(bad_rates[min_idx]['bad_rate'] - bad_rates[min_idx+1]['bad_rate']):
-            bins[min_idx-1] += bins[min_idx]
+        if cat:
+            if np.abs(bad_rates[min_idx]['bad_rate'] - bad_rates[min_idx-1]['bad_rate']) \
+                < np.abs(bad_rates[min_idx]['bad_rate'] - bad_rates[min_idx+1]['bad_rate']):
+                bins[min_idx-1] += bins[min_idx]
+            else:
+                bins[min_idx+1] += bins[min_idx]
         else:
-            bins[min_idx+1] += bins[min_idx]
+            temp_bins = copy.deepcopy(bins)
+            temp_bins[min_idx] += temp_bins[min_idx-1]
+            del temp_bins[min_idx-1]
+            temp_bad_rates, temp_bins, overall_rate = bin_bad_rate(X=X,
+                                                                   y=y,
+                                                                   bins=temp_bins,
+                                                                   cat=False)
+            chi_1 = _chi2(bad_rates=temp_bad_rates,
+                          overall_rate=overall_rate)
+            del temp_bins
+
+            temp_bins = copy.deepcopy(bins)
+            temp_bins[min_idx] += temp_bins[min_idx+1]
+            del temp_bins[min_idx+1]
+            temp_bad_rates, temp_bins, overall_rate = bin_bad_rate(X=X,
+                                                                   y=y,
+                                                                   bins=temp_bins,
+                                                                   cat=False)
+            chi_2 = _chi2(bad_rates=temp_bad_rates,
+                          overall_rate=overall_rate)
+            del temp_bins
+
+            if chi_1 < chi_2:
+                bins[min_idx-1] += bins[min_idx]
+            else:
+                bins[min_idx+1] += bins[min_idx]
+
     del bins[min_idx]
     bad_rates, bins, overall_rate = bin_bad_rate(X=X,
                                                  y=y,
@@ -74,7 +104,7 @@ def bin_bad_rate(X: np.ndarray,
                 'total': len(X_isin),
                 'bad': y_not_na[np.isin(X_not_na, X_isin)].sum(),
                 'pcnt': np.sum(np.isin(X_not_na, X_isin)) * 1.0 / len(X),
-                'bad_rate': y_not_na[np.isin(X_not_na, X_isin)].sum() / len(y_not_na[np.isin(X_not_na, X_isin)])
+                'bad_rate': y_not_na[np.isin(X_not_na, X_isin)].sum() / len(y_not_na[np.isin(X_not_na, X_isin)])         
             }
         bad_rates.append(stats)
         
@@ -115,48 +145,53 @@ def cat_bining(X: np.ndarray,
                                                   bins=bins,
                                                   cat=True)
     
-    # 0 bad_rate group to nearest bin
-    while (bad_rates[0]['bad_rate'] == 0 and len(bad_rates) > 2):
-        bins[0] += bins[1]
-        del bins[1]
-        bad_rates, bins, _ = bin_bad_rate(X=X,
-                                          y=y,
-                                          bins=bins,
-                                          cat=True)
-
-    # proportion from best bin and small pcnt on values
-    prop = 0
-    while (prop < temperature and len(bad_rates) > 2):
-        for i in range(len(bad_rates)):
-            prop = bad_rates[i]['pcnt'] * bad_rates[i]['bad_rate']
-            if prop < temperature:
-                if bad_rates[len(bad_rates)-1]['pcnt'] \
-                    > bad_rates[len(bad_rates)-2]['pcnt']:
-                    bins[len(bad_rates)-2] += bins[i]
-                else:
-                    bins[len(bad_rates)-1] += bins[i]
-                del bins[i]
-                bad_rates, bins, _ = bin_bad_rate(X=X,
-                                                  y=y,
-                                                  bins=bins,
-                                                  cat=True)
-                break
-
-    # min_pcnt_group threshold to nearest bad_rate group
-    while min([bad_rate['pcnt'] for bad_rate in bad_rates]) < min_pcnt_group:
-        bad_rates, bins, _ = _merge_bins_for_min_pcnt(X=X,
-                                                      y=y,
-                                                      bad_rates=bad_rates,
-                                                      bins=bins)
-
-    # count of bins > max_group
-    while len(bad_rates) > n_finale:
-        bad_rates, bins, _ = _merge_bins_for_min_pcnt(X=X,
-                                                      y=y,
-                                                      bad_rates=bad_rates,
-                                                      bins=bins)
+    if len(bins) <= 2:
+        return bad_rates
+    else:
+        # 0 bad_rate group to nearest bin
+        while (bad_rates[0]['bad_rate'] == 0 and len(bad_rates) > 2):
+            bins[0] += bins[1]
+            del bins[1]
+            bad_rates, bins, _ = bin_bad_rate(X=X,
+                                              y=y,
+                                              bins=bins,
+                                              cat=True)
     
-    return bad_rates
+        # proportion from best bin and small pcnt on values
+        prop = 0
+        while (prop < temperature and len(bad_rates) > 2):
+            for i in range(len(bad_rates)):
+                prop = bad_rates[i]['pcnt'] * bad_rates[i]['bad_rate']
+                if prop < temperature:
+                    if bad_rates[len(bad_rates)-1]['pcnt'] \
+                        > bad_rates[len(bad_rates)-2]['pcnt']:
+                        bins[len(bad_rates)-2] += bins[i]
+                    else:
+                        bins[len(bad_rates)-1] += bins[i]
+                    del bins[i]
+                    bad_rates, bins, _ = bin_bad_rate(X=X,
+                                                      y=y,
+                                                      bins=bins,
+                                                      cat=True)
+                    break
+    
+        # min_pcnt_group threshold to nearest bad_rate group
+        while min([bad_rate['pcnt'] for bad_rate in bad_rates]) < min_pcnt_group:
+            bad_rates, bins, _ = _merge_bins_for_min_pcnt(X=X,
+                                                          y=y,
+                                                          bad_rates=bad_rates,
+                                                          bins=bins,
+                                                          cat=True)
+    
+        # count of bins > max_group
+        while len(bad_rates) > n_finale:
+            bad_rates, bins, _ = _merge_bins_for_min_pcnt(X=X,
+                                                          y=y,
+                                                          bad_rates=bad_rates,
+                                                          bins=bins,
+                                                          cat=True)
+        
+        return bad_rates
 
 
 def num_bining(X: np.ndarray,
@@ -204,10 +239,25 @@ def num_bining(X: np.ndarray,
                                                          bins=bins,
                                                          cat=False)
 
+        if min_pcnt_group > 0:
+            while min([bad_rate['pcnt'] for bad_rate in bad_rates]) < min_pcnt_group:
+                bad_rates, bins, overall_rate = _merge_bins_for_min_pcnt(X=X,
+                                                                         y=y,
+                                                                         bad_rates=bad_rates,
+                                                                         bins=bins,
+                                                                         cat=False)
+
+        while not _bad_rate_monotone(bad_rates) and len(bad_rates) > 2:
+            bad_rates, bins, overall_rate = _merge_bins_for_min_pcnt(X=X,
+                                                                     y=y,
+                                                                     bad_rates=bad_rates,
+                                                                     bins=bins,
+                                                                     cat=False)
+
         return bad_rates
 
 
-def bad_rate_monotone(bad_rates: Dict) -> bool:
+def _bad_rate_monotone(bad_rates: Dict) -> bool:
     
     if len(bad_rates) <= 2:
         return True

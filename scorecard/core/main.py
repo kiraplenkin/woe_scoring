@@ -16,7 +16,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                  verbose: bool = False,
                  cat_features: List = None,
                  cat_features_threshold: int = 0,
-                 cat_features_missing_mask: str = 'NaN',
+                 missing_mask: str = 'NaN',
                  cat_features_temperature: float = 0.005,
                  specials: List = []):
         """
@@ -29,7 +29,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         self.min_pcnt_group = min_pcnt_group
         self.cat_features = cat_features if cat_features else []
         self.cat_features_threshold = cat_features_threshold
-        self.cat_features_missing_mask = cat_features_missing_mask
+        self.missing_mask = missing_mask
         self.cat_features_temperature = cat_features_temperature
         self.specials = specials if specials else []
         self.verbose = verbose
@@ -64,7 +64,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             for i in range(len(self.feature_names)):
                 if type(X[0, i]) == np.dtype('object') \
                     or type(X[0, i]) == np.dtype('str') \
-                    or len(np.unique(X[:, i][~np.isin(X[:, i], self.cat_features_missing_mask)])) < self.cat_features_threshold:
+                    or len(np.unique(X[:, i][~np.isin(X[:, i], self.missing_mask)])) < self.cat_features_threshold:
                     self.cat_features.append(self.feature_names[i])
         if len(self.cat_features) > 0:
             self.num_features = [feature for feature in self.feature_names if feature not in self.cat_features]
@@ -77,7 +77,8 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                                          min_pcnt_group=self.min_pcnt_group,
                                          n_finale=self.n_finale,
                                          temperature=self.cat_features_temperature,
-                                         mask=self.cat_features_missing_mask)}
+                                         mask=self.missing_mask),
+                     'type': 'categotical'}
                 )
         else:
             self.num_features = self.feature_names
@@ -90,7 +91,8 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                                      y=y,
                                      min_pcnt_group=self.min_pcnt_group,
                                      n_finale=self.n_finale,
-                                     mask=self.cat_features_missing_mask)}
+                                     mask=self.missing_mask),
+                 'type': 'numeric'}
             )
         print(round(time() - start_time, 4))
 
