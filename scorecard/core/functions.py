@@ -52,17 +52,30 @@ def _chi2(bad_rates: Dict,
 def bin_bad_rate(X: np.ndarray,
                  y: np.ndarray,
                  bins: List,
+                 mask: str = 'NaN',
                  cat: bool = False) -> Tuple[Dict, List, float]:
     
     bad_rates = []
     for value in bins:
-        stats = {
-            'bin': value,
-            'total': np.sum(np.isin(X, value)),
-            'bad': y[np.isin(X, value)].sum(),
-            'pcnt': np.sum(np.isin(X, value)) * 1.0 / len(X),
-            'bad_rate': y[np.isin(X, value)].sum() / len(y[np.isin(X, value)])
-        }
+        if cat:
+            stats = {
+                'bin': value,
+                'total': np.sum(np.isin(X, value)),
+                'bad': y[np.isin(X, value)].sum(),
+                'pcnt': np.sum(np.isin(X, value)) * 1.0 / len(X),
+                'bad_rate': y[np.isin(X, value)].sum() / len(y[np.isin(X, value)])
+            }
+        else:
+            X_not_na = X[~np.isin(X, mask)]
+            y_not_na = y[~np.isin(X, mask)]
+            X_isin = X_not_na[np.where((X_not_na >= np.min(value)) & (X_not_na <= np.max(value)))]
+            stats = {
+                'bin': value,
+                'total': len(X_isin),
+                'bad': y_not_na[np.isin(X_not_na, X_isin)].sum(),
+                'pcnt': np.sum(np.isin(X_not_na, X_isin)) * 1.0 / len(X),
+                'bad_rate': y_not_na[np.isin(X_not_na, X_isin)].sum() / len(y_not_na[np.isin(X_not_na, X_isin)])
+            }
         bad_rates.append(stats)
         
     if cat:
@@ -152,7 +165,16 @@ def num_bining(X: np.ndarray,
                n_finale: int,
                mask: str) -> Dict:
 
-    bins = list([bin] for bin in np.unique(X[~np.isin(X, mask)]))
+    if len(np.unique(X[~np.isin(X, mask)])) > 100:  # TODO make it to parameter
+        N = len(np.unique(X[~np.isin(X, mask)]))
+        n = N // 100
+        split_point_index = [i * n for i in range(1, 100)]
+        bins = list([bin] for bin in np.unique([X[~np.isin(X, mask)][i] for i in split_point_index]))
+    else:
+        bins = list([bin] for bin in np.unique(X[~np.isin(X, mask)]))
+
+    bins[0] = list([np.NINF, bins[0][0]])
+    bins[len(bins)-1] = list([bins[len(bins)-1][0], np.inf])
     bad_rates, bins, overall_rate = bin_bad_rate(X=X,
                                                  y=y,
                                                  bins=bins,
