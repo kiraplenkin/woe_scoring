@@ -101,13 +101,15 @@ def bin_bad_rate(X: np.ndarray,
                 woe = np.log(good_pcnt / bad_pcnt)
             else:
                 woe = np.log(good_pcnt / 0.000001)
+            iv = (good_pcnt - bad_pcnt) * woe
             stats = {
                 'bin': value,
                 'total': total,
                 'bad': bad,
                 'pcnt': pcnt,
                 'bad_rate': bad_rate,
-                'woe': woe
+                'woe': woe,
+                'iv': iv
             }
         else:
             X_not_na = X[~np.isin(X, mask)]
@@ -124,13 +126,15 @@ def bin_bad_rate(X: np.ndarray,
                 woe = np.log(good_pcnt / bad_pcnt)
             else:
                 woe = np.log(good_pcnt / 0.000001)
+            iv = (good_pcnt - bad_pcnt) * woe
             stats = {
                 'bin': value,
                 'total': total,
                 'bad': bad,
                 'pcnt': pcnt,
                 'bad_rate': bad_rate,
-                'woe': woe
+                'woe': woe,
+                'iv': iv
             }
         bad_rates.append(stats)
         
