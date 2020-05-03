@@ -11,7 +11,7 @@ from .functions import num_bining
 
 class WOETransformer(BaseEstimator, TransformerMixin):
     def __init__(self,
-                 n_finale: int = 15,
+                 n_finale: int = 10,
                  min_pcnt_group: float = 0.05,
                  verbose: bool = False,
                  cat_features: List = None,

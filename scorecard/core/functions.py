@@ -1,7 +1,9 @@
 import copy
+import warnings
 import numpy as np
 from scipy.stats import chisquare
 from typing import Dict, List, Tuple
+warnings.filterwarnings('ignore')
 
 
 def _calc_bins(bad_rates: Dict) -> List:
@@ -88,23 +90,47 @@ def bin_bad_rate(X: np.ndarray,
     bad_rates = []
     for value in bins:
         if cat:
+            total = np.sum(np.isin(X, value))
+            bad = y[np.isin(X, value)].sum()
+            pcnt = np.sum(np.isin(X, value)) * 1.0 / len(X)
+            bad_rate = y[np.isin(X, value)].sum() / len(y[np.isin(X, value)])
+            good = total - bad
+            good_pcnt = good / total
+            bad_pcnt = bad / total
+            if bad_pcnt != 0:
+                woe = np.log(good_pcnt / bad_pcnt)
+            else:
+                woe = np.log(good_pcnt / 0.000001)
             stats = {
                 'bin': value,
-                'total': np.sum(np.isin(X, value)),
-                'bad': y[np.isin(X, value)].sum(),
-                'pcnt': np.sum(np.isin(X, value)) * 1.0 / len(X),
-                'bad_rate': y[np.isin(X, value)].sum() / len(y[np.isin(X, value)])
+                'total': total,
+                'bad': bad,
+                'pcnt': pcnt,
+                'bad_rate': bad_rate,
+                'woe': woe
             }
         else:
             X_not_na = X[~np.isin(X, mask)]
             y_not_na = y[~np.isin(X, mask)]
             X_isin = X_not_na[np.where((X_not_na >= np.min(value)) & (X_not_na <= np.max(value)))]
+            total = len(X_isin)
+            bad = y_not_na[np.isin(X_not_na, X_isin)].sum()
+            pcnt = np.sum(np.isin(X_not_na, X_isin)) * 1.0 / len(X)
+            bad_rate = y_not_na[np.isin(X_not_na, X_isin)].sum() / len(y_not_na[np.isin(X_not_na, X_isin)])
+            good = total - bad
+            good_pcnt = good / total
+            bad_pcnt = bad / total
+            if bad_pcnt != 0:
+                woe = np.log(good_pcnt / bad_pcnt)
+            else:
+                woe = np.log(good_pcnt / 0.000001)
             stats = {
                 'bin': value,
-                'total': len(X_isin),
-                'bad': y_not_na[np.isin(X_not_na, X_isin)].sum(),
-                'pcnt': np.sum(np.isin(X_not_na, X_isin)) * 1.0 / len(X),
-                'bad_rate': y_not_na[np.isin(X_not_na, X_isin)].sum() / len(y_not_na[np.isin(X_not_na, X_isin)])         
+                'total': total,
+                'bad': bad,
+                'pcnt': pcnt,
+                'bad_rate': bad_rate,
+                'woe': woe
             }
         bad_rates.append(stats)
         
