@@ -59,7 +59,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 
         X, y = self._check_inputs(X, y)
         
-        start_time = time()
         if len(self.cat_features) == 0 and self.cat_features_threshold > 0:
             for i in range(len(self.feature_names)):
                 if type(X[0, i]) == np.dtype('object') \
@@ -77,8 +76,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                                          min_pcnt_group=self.min_pcnt_group,
                                          n_finale=self.n_finale,
                                          temperature=self.cat_features_temperature,
-                                         mask=self.missing_mask),
-                     'type': 'categotical'}
+                                         mask=self.missing_mask)}
                 )
         else:
             self.num_features = self.feature_names
@@ -91,11 +89,61 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                                      y=y,
                                      min_pcnt_group=self.min_pcnt_group,
                                      n_finale=self.n_finale,
-                                     mask=self.missing_mask),
-                 'type': 'numeric'}
+                                     mask=self.missing_mask)}
             )
-        print(round(time() - start_time, 4))
+    
+        return self
 
+
+    def transform(self,
+                  X: Union[pd.DataFrame, np.ndarray],
+                  y: Union[pd.Series, np.ndarray] = None,
+                  hight_IV_threshold: float = 0.02,
+                  suffix: str = '_WOE'):
+        """
+        Checks and transforms input arrays
+        :param X: X data array
+        :param y: target array
+        :return: transformed data
+        """
+        if hight_IV_threshold > 0:
+            self.feature_names = []
+            for dict in self.WOE_IV_dict:
+                for feature in dict.keys():
+                    sum_iv = 0
+                    for iv in dict[feature]:
+                        sum_iv += iv['iv']
+                    if sum_iv > hight_IV_threshold:
+                        self.feature_names.append(feature)
+        
+        for feature in self.feature_names:
+            new_feature = feature + suffix
+            for feature_dict in self.WOE_IV_dict:
+                if list(feature_dict)[0] == feature:
+                    for bin in feature_dict[feature]:
+                        if feature in self.cat_features:
+                            X.loc[np.isin(X[feature], bin['bin']), new_feature] = bin['woe']
+                        else:
+                            X.loc[np.logical_and(X[feature] >= np.min(bin['bin']),
+                                                 X[feature] <= np.max(bin['bin'])), new_feature] = bin['woe']
+
+        return X
+
+
+    def fit_transform(self,
+                      X: Union[pd.DataFrame, np.ndarray],
+                      y: Union[pd.Series, np.ndarray],
+                      hight_IV_threshold: float = 0.02,
+                      suffix: str = '_WOE'):
+        self.fit(X=X,
+                 y=y)
+        X = self.transform(X=X,
+                           y=y,
+                           hight_IV_threshold=hight_IV_threshold,
+                           suffix=suffix)
+        
+        return X
+            
 
     def _check_inputs(self,
                       X: Union[pd.DataFrame, np.ndarray],
