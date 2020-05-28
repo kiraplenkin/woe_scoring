@@ -12,6 +12,7 @@ from .functions import num_bining
 class WOETransformer(BaseEstimator, TransformerMixin):
     def __init__(self,
                  n_finale: int = 10,
+                 max_bins: int = 100,
                  min_pcnt_group: float = 0.05,
                  verbose: bool = False,
                  cat_features: List = None,
@@ -26,6 +27,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         TODO: add n_jobs
         """
         self.n_finale = n_finale
+        self.max_bins = max_bins
         self.min_pcnt_group = min_pcnt_group
         self.cat_features = cat_features if cat_features else []
         self.cat_features_threshold = cat_features_threshold
@@ -89,6 +91,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                                      y=y,
                                      min_pcnt_group=self.min_pcnt_group,
                                      n_finale=self.n_finale,
+                                     max_bins=self.max_bins,
                                      mask=self.missing_mask)}
             )
     

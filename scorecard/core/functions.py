@@ -228,12 +228,13 @@ def num_bining(X: np.ndarray,
                y: np.ndarray,
                min_pcnt_group: float,
                n_finale: int,
+               max_bins: int,
                mask: str) -> Dict:
 
-    if len(np.unique(X[~np.isin(X, mask)])) > 100:  # TODO make it to parameter
+    if len(np.unique(X[~np.isin(X, mask)])) > max_bins:  # TODO make it to parameter
         N = len(np.unique(X[~np.isin(X, mask)]))
-        n = N // 100
-        split_point_index = [i * n for i in range(1, 100)]
+        n = N // max_bins
+        split_point_index = [i * n for i in range(1, max_bins)]
         bins = list([bin] for bin in np.unique([X[~np.isin(X, mask)][i] for i in split_point_index]))
     else:
         bins = list([bin] for bin in np.unique(X[~np.isin(X, mask)]))
