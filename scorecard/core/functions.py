@@ -6,14 +6,6 @@ from typing import Dict, List, Tuple
 warnings.filterwarnings('ignore')
 
 
-def _calc_bins(bad_rates: Dict) -> List:
-
-    bins = []
-    for bin in bad_rates:
-        bins.append(bin['bin'])
-    return bins
-
-
 def _merge_bins_for_min_pcnt(X: np.ndarray,
                              y: np.ndarray,
                              bad_rates: Dict,
@@ -148,7 +140,7 @@ def bin_bad_rate(X: np.ndarray,
     
     overall_rate = B * 1.0 / N
     
-    return (bad_rates, _calc_bins(bad_rates), overall_rate)
+    return (bad_rates, [bin['bin'] for bin in bad_rates], overall_rate)
 
 
 def cat_bining(X: np.ndarray,
@@ -231,7 +223,7 @@ def num_bining(X: np.ndarray,
                max_bins: int,
                mask: str) -> Dict:
 
-    if len(np.unique(X[~np.isin(X, mask)])) > max_bins:  # TODO make it to parameter
+    if len(np.unique(X[~np.isin(X, mask)])) > max_bins:
         N = len(np.unique(X[~np.isin(X, mask)]))
         n = N // max_bins
         split_point_index = [i * n for i in range(1, max_bins)]
