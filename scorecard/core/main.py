@@ -14,10 +14,10 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         max_bins: int = 10,
         min_pcnt_group: float = 0.05,
         verbose: bool = False,
-        prefix: str = 'WOE_',
+        prefix: str = "WOE_",
         cat_features: List = None,
         cat_features_threshold: int = 0,
-        safe_original_data: bool = False
+        safe_original_data: bool = False,
     ):
         """
         Performs the Weight Of Evidence transformation over the input X features using information from y vector.
@@ -47,8 +47,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         self.feature_names = []
         self.num_features = []
 
-    def fit(self, X: Union[pd.DataFrame, np.ndarray],
-            y: Union[pd.Series, np.ndarray]):
+    def fit(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]):
         """
         Fits the input data
         :param X: data matrix
@@ -87,7 +86,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                             X=X[:, feature_idx],
                             y=y,
                             min_pcnt_group=self.min_pcnt_group,
-                            max_bins=self.max_bins
+                            max_bins=self.max_bins,
                         )
                     }
                 )
@@ -105,17 +104,16 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                         min_pcnt_group=self.min_pcnt_group,
                         max_bins=self.max_bins,
                     )[0],
-                    'missing_bin': num_bining(
+                    "missing_bin": num_bining(
                         X=X[:, feature_idx],
                         y=y,
                         min_pcnt_group=self.min_pcnt_group,
                         max_bins=self.max_bins,
-                    )[1]
+                    )[1],
                 }
             )
 
         return self
-
 
     def transform(self, X: pd.DataFrame):
         """
@@ -129,9 +127,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 for bin_values in self.WOE_IV_dict[i][feature]:
                     if feature in self.cat_features:
                         X.loc[
-                            np.isin(
-                                X[feature], bin_values["bin"]
-                            ), new_feature
+                            np.isin(X[feature], bin_values["bin"]), new_feature
                         ] = bin_values["woe"]
                     else:
                         X.loc[
@@ -141,21 +137,18 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                             ),
                             new_feature,
                         ] = bin_values["woe"]
-            if self.WOE_IV_dict[i]["missing_bin"] == 'first':
+            if self.WOE_IV_dict[i]["missing_bin"] == "first":
                 X[new_feature].fillna(
-                    self.WOE_IV_dict[i][feature][0]["woe"],
-                    inplace=True
+                    self.WOE_IV_dict[i][feature][0]["woe"], inplace=True
                 )
-            if self.WOE_IV_dict[i]["missing_bin"] == 'last':
+            if self.WOE_IV_dict[i]["missing_bin"] == "last":
                 X[new_feature].fillna(
-                    self.WOE_IV_dict[i][feature][-1]["woe"],
-                    inplace=True
+                    self.WOE_IV_dict[i][feature][-1]["woe"], inplace=True
                 )
             if not self.safe_original_data:
                 del X[feature]
 
         return X
-
 
     def fit_transform(
         self,
@@ -167,10 +160,8 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 
         return X
 
-
-    def _check_inputs(self,
-        X: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.DataFrame, np.ndarray]
+    def _check_inputs(
+        self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.DataFrame, np.ndarray]
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Check input data
@@ -190,7 +181,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             y_numeric=True,
         )
         return X, y
-
 
     def _print(self, msg: str):
         if self.verbose:
