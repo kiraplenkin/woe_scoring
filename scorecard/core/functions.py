@@ -66,12 +66,92 @@ def _chi2(bad_rates: Dict, overall_rate: float) -> float:
     return chi2
 
 
+def _check_diff_woe(bad_rates: Dict) -> int:
+    woe_delta = [
+        abs(bad_rates[i]["woe"] - bad_rates[i-1]["woe"])
+        for i in range(1, len(bad_rates))
+    ]
+    for i, delta in enumerate(woe_delta):
+        if delta < 0.05:
+            return i
+
+
+def _mono_flags(bad_rates: Dict) -> List:
+    bad_rate_not_monotone_flags = [
+        (
+            bad_rates[i]["bad_rate"] < bad_rates[i + 1]["bad_rate"]
+            and bad_rates[i]["bad_rate"] < bad_rates[i - 1]["bad_rate"]
+        )
+        or (
+            bad_rates[i]["bad_rate"] > bad_rates[i + 1]["bad_rate"]
+            and bad_rates[i]["bad_rate"] > bad_rates[i - 1]["bad_rate"]
+        )
+        for i in range(1, len(bad_rates) - 1)
+    ]
+    return bad_rate_not_monotone_flags
+
+
+def _merge_bins_chi(
+    X: np.ndarray,
+    y: np.ndarray,
+    bad_rates: Dict,
+    bins: List
+) -> Tuple[Dict, List]:
+    idx = _mono_flags(bad_rates).index(True)
+    if idx == 0:
+        del bins[1]
+    elif idx == len(bad_rates)-2:
+        del bins[len(bins)-2]
+    else:
+        temp_bins = copy.deepcopy(bins)
+        del temp_bins[idx+1]
+        temp_bad_rates, temp_overall_rate = bin_bad_rate(X, y, temp_bins)
+        chi_1 = _chi2(temp_bad_rates, temp_overall_rate)
+        del temp_bins
+
+        temp_bins = copy.deepcopy(bins)
+        del temp_bins[idx+2]
+        temp_bad_rates, temp_overall_rate = bin_bad_rate(X, y, temp_bins)
+        chi_2 = _chi2(temp_bad_rates, temp_overall_rate)
+        if chi_1 < chi_2:
+            del bins[idx+1]
+        else:
+            del bins[idx+2]
+    bad_rates, _ = bin_bad_rate(X, y, bins)
+    return bad_rates, bins
+
+
+def _merge_bins_min_pcnt(
+    X: np.ndarray,
+    y: np.ndarray,
+    bad_rates: Dict,
+    bins: List
+) -> Tuple[Dict, List]:
+        idx = [
+            pcnt for pcnt in [
+                bad_rates[i]['pcnt'] for i in range(len(bad_rates))
+            ]
+        ].index(min([bad_rate["pcnt"] for bad_rate in bad_rates]))
+        if idx == 0:
+            del bins[1]
+        elif idx == len(bad_rates)-1:
+            del bins[len(bins)-2]
+        else:
+            if bad_rates[idx-1]['pcnt'] < bad_rates[idx+1]['pcnt']:
+                del bins[idx]
+            else:
+                del bins[idx+1]
+        bad_rates, _ = bin_bad_rate(X, y, bins)
+        return bad_rates, bins
+
+
 def bin_bad_rate(
-    X: np.ndarray, y: np.ndarray, bins: List, mask: str = "NaN", cat: bool = False
-) -> Tuple[Dict, List, float]:
+    X: np.ndarray, y: np.ndarray, bins: List, cat: bool = False
+) -> Tuple[Dict, float]:
 
     bad_rates = []
-    for value in bins:
+    for i in range(len(bins)-1):
+        value = [bins[i], bins[i+1]]
         if cat:
             total = np.sum(np.isin(X, value))
             bad = y[np.isin(X, value)].sum()
@@ -95,10 +175,11 @@ def bin_bad_rate(
                 "iv": iv,
             }
         else:
-            X_not_na = X[~np.isin(X, mask)]
-            y_not_na = y[~np.isin(X, mask)]
+            X_not_na = X[~np.isnan(X)]
+            y_not_na = y[~np.isnan(X)]
             X_isin = X_not_na[
-                np.where((X_not_na >= np.min(value)) & (X_not_na <= np.max(value)))
+                np.where((X_not_na >= np.min(value))
+                         & (X_not_na < np.max(value)))
             ]
             total = len(X_isin)
             bad = y_not_na[np.isin(X_not_na, X_isin)].sum()
@@ -128,14 +209,14 @@ def bin_bad_rate(
     if cat:
         bad_rates.sort(key=lambda x: x["bad_rate"])
 
-    N, B = 0, 0
-    for bin in bad_rates:
-        N += bin["total"]
-        B += bin["bad"]
+    total, bad = 0, 0
+    for bad_rate_bin in bad_rates:
+        total += bad_rate_bin["total"]
+        bad += bad_rate_bin["bad"]
 
-    overall_rate = B * 1.0 / N
+    overall_rate = bad * 1.0 / total
 
-    return (bad_rates, [bin["bin"] for bin in bad_rates], overall_rate)
+    return (bad_rates, overall_rate)
 
 
 def cat_bining(
@@ -204,81 +285,42 @@ def num_bining(
     X: np.ndarray,
     y: np.ndarray,
     min_pcnt_group: float,
-    n_finale: int,
     max_bins: int,
-    mask: str,
-) -> Dict:
+) -> Tuple[Dict, str]:
 
-    if len(np.unique(X[~np.isin(X, mask)])) > max_bins:
-        N = len(np.unique(X[~np.isin(X, mask)]))
-        n = N // max_bins
-        split_point_index = [i * n for i in range(1, max_bins)]
-        bins = list(
-            [bin]
-            for bin in np.unique([X[~np.isin(X, mask)][i] for i in split_point_index])
-        )
+    missing_bin = None
+    bins = [np.NINF]
+    if len(np.unique(X)) > max_bins:
+        for quantile in range(1, 10):
+            bins.append(np.nanquantile(X, quantile/10, axis=0))
     else:
-        bins = list([bin] for bin in np.unique(X[~np.isin(X, mask)]))
+        for value in sorted(np.unique(X)):
+            bins.append(value)
+    bins.append(np.inf)
 
-    bins[0] = list([np.NINF, bins[0][0]])
-    bins[len(bins) - 1] = list([bins[len(bins) - 1][0], np.inf])
-    bad_rates, bins, overall_rate = bin_bad_rate(X=X, y=y, bins=bins, cat=False)
+    bad_rates, _ = bin_bad_rate(X, y, bins)
 
-    if len(bins) <= 2:
-        return bad_rates
+    na_bad_rate = y[np.isnan(X)].sum() / len(y[np.isnan(X)])
+
+    if abs(na_bad_rate - bad_rates[0]['bad_rate']) \
+       < abs(na_bad_rate - bad_rates[len(bad_rates)-1]['bad_rate']):
+        X = np.nan_to_num(X, nan=np.amin(X[~np.isnan(X)]))
+        missing_bin = "first"
     else:
-        while len(bins) > n_finale:
-            chiq_list = []
-            for i in range(len(bad_rates) - 1):
-                temp_bins = copy.deepcopy(bins)
-                temp_bins[i] += temp_bins[i + 1]
-                del temp_bins[i + 1]
-                temp_bad_rates, temp_bins, overall_rate = bin_bad_rate(
-                    X=X, y=y, bins=temp_bins, cat=False
-                )
-                chiq_list.append(
-                    _chi2(bad_rates=temp_bad_rates, overall_rate=overall_rate)
-                )
-                del temp_bins
-            best_combined = chiq_list.index(min(chiq_list))
-            bins[best_combined] += bins[best_combined + 1]
-            del bins[best_combined + 1]
-            bad_rates, bins, overall_rate = bin_bad_rate(X=X, y=y, bins=bins, cat=False)
+        X = np.nan_to_num(X, nan=np.amax(X[~np.isnan(X)]))
+        missing_bin = "last"
 
-        #  TODO add preparing missing values
+    bad_rates, _ = bin_bad_rate(X, y, bins)
 
-        if min_pcnt_group > 0:
-            while min([bad_rate["pcnt"] for bad_rate in bad_rates]) < min_pcnt_group:
-                bad_rates, bins, overall_rate = _merge_bins_for_min_pcnt(
-                    X=X, y=y, bad_rates=bad_rates, bins=bins, cat=False
-                )
+    while True in _mono_flags(bad_rates):
+        bad_rates, bins = _merge_bins_chi(X, y, bad_rates, bins)
 
-        while not _bad_rate_monotone(bad_rates) and len(bad_rates) > 2:
-            bad_rates, bins, overall_rate = _merge_bins_for_min_pcnt(
-                X=X, y=y, bad_rates=bad_rates, bins=bins, cat=False
-            )
+    while _check_diff_woe(bad_rates) is not None:
+        idx = _check_diff_woe(bad_rates) + 1
+        del bins[idx]
+        bad_rates, _ = bin_bad_rate(X, y, bins)
 
-        return bad_rates
+    while min([bad_rate["pcnt"] for bad_rate in bad_rates]) <= min_pcnt_group:
+        bad_rates, bins = _merge_bins_min_pcnt(X, y, bad_rates, bins)
 
-
-def _bad_rate_monotone(bad_rates: Dict) -> bool:
-
-    if len(bad_rates) <= 2:
-        return True
-
-    bad_rate_not_monotone = [
-        (
-            bad_rates[i]["bad_rate"] < bad_rates[i + 1]["bad_rate"]
-            and bad_rates[i]["bad_rate"] < bad_rates[i - 1]["bad_rate"]
-        )
-        or (
-            bad_rates[i]["bad_rate"] > bad_rates[i + 1]["bad_rate"]
-            and bad_rates[i]["bad_rate"] > bad_rates[i - 1]["bad_rate"]
-        )
-        for i in range(1, len(bad_rates) - 1)
-    ]
-
-    if bad_rate_not_monotone:
-        return False
-    else:
-        return True
+    return bad_rates, missing_bin

@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from time import time
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils import check_X_y
 from sklearn.utils.multiclass import type_of_target
@@ -12,15 +11,13 @@ from .functions import num_bining
 class WOETransformer(BaseEstimator, TransformerMixin):
     def __init__(
         self,
-        n_finale: int = 10,
-        max_bins: int = 100,
+        max_bins: int = 10,
         min_pcnt_group: float = 0.05,
         verbose: bool = False,
+        prefix: str = 'WOE_',
         cat_features: List = None,
         cat_features_threshold: int = 0,
-        missing_mask: str = "NaN",
-        cat_features_temperature: float = 0.005,
-        specials: List = [],
+        safe_original_data: bool = False
     ):
         """
         Performs the Weight Of Evidence transformation over the input X features using information from y vector.
@@ -38,11 +35,20 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         self.specials = specials if specials else []
         self.verbose = verbose
 
-        self.WOE_IV_dict = []  # self.transformers
+        self.max_bins = max_bins
+        self.min_pcnt_group = min_pcnt_group
+        self.cat_features = cat_features if cat_features else []
+        self.cat_features_threshold = cat_features_threshold
+        self.verbose = verbose
+        self.prefix = prefix
+        self.safe_original_data = safe_original_data
+
+        self.WOE_IV_dict = []
         self.feature_names = []
         self.num_features = []
 
-    def fit(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]):
+    def fit(self, X: Union[pd.DataFrame, np.ndarray],
+            y: Union[pd.Series, np.ndarray]):
         """
         Fits the input data
         :param X: data matrix
@@ -50,10 +56,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         :return: self
         """
         if isinstance(X, pd.DataFrame):
-            if self.specials:
-                self.feature_names = X.drop(self.specials, axis=1).columns
-            else:
-                self.feature_names = X.columns
+            self.feature_names = X.columns
         elif isinstance(X, np.ndarray):
             self.feature_names = ["X%i" for i in range(X.shape[-1])]
         else:
@@ -66,8 +69,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 if (
                     type(X[0, i]) == np.dtype("object")
                     or type(X[0, i]) == np.dtype("str")
-                    or len(np.unique(X[:, i][~np.isin(X[:, i], self.missing_mask)]))
-                    < self.cat_features_threshold
+                    or len(np.unique(X[:, i])) < self.cat_features_threshold
                 ):
                     self.cat_features.append(self.feature_names[i])
         if len(self.cat_features) > 0:
@@ -85,9 +87,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                             X=X[:, feature_idx],
                             y=y,
                             min_pcnt_group=self.min_pcnt_group,
-                            n_finale=self.n_finale,
-                            temperature=self.cat_features_temperature,
-                            mask=self.missing_mask,
+                            max_bins=self.max_bins
                         )
                     }
                 )
@@ -103,74 +103,74 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                         X=X[:, feature_idx],
                         y=y,
                         min_pcnt_group=self.min_pcnt_group,
-                        n_finale=self.n_finale,
                         max_bins=self.max_bins,
-                        mask=self.missing_mask,
-                    )
+                    )[0],
+                    'missing_bin': num_bining(
+                        X=X[:, feature_idx],
+                        y=y,
+                        min_pcnt_group=self.min_pcnt_group,
+                        max_bins=self.max_bins,
+                    )[1]
                 }
             )
 
         return self
 
-    def transform(
-        self,
-        X: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.Series, np.ndarray] = None,
-        hight_IV_threshold: float = 0.02,
-        suffix: str = "_WOE",
-    ):
+
+    def transform(self, X: pd.DataFrame):
         """
         Checks and transforms input arrays
         :param X: X data array
-        :param y: target array
         :return: transformed data
         """
-        if hight_IV_threshold > 0:
-            self.feature_names = []
-            for dict in self.WOE_IV_dict:
-                for feature in dict.keys():
-                    sum_iv = 0
-                    for iv in dict[feature]:
-                        sum_iv += iv["iv"]
-                    if sum_iv > hight_IV_threshold:
-                        self.feature_names.append(feature)
-
-        for feature in self.feature_names:
-            new_feature = feature + suffix
-            for feature_dict in self.WOE_IV_dict:
-                if list(feature_dict)[0] == feature:
-                    for bin in feature_dict[feature]:
-                        if feature in self.cat_features:
-                            X.loc[np.isin(X[feature], bin["bin"]), new_feature] = bin[
-                                "woe"
-                            ]
-                        else:
-                            X.loc[
-                                np.logical_and(
-                                    X[feature] >= np.min(bin["bin"]),
-                                    X[feature] <= np.max(bin["bin"]),
-                                ),
-                                new_feature,
-                            ] = bin["woe"]
+        for i, feature in enumerate(self.feature_names):
+            new_feature = self.prefix + feature
+            if list(self.WOE_IV_dict[i])[0] == feature:
+                for bin_values in self.WOE_IV_dict[i][feature]:
+                    if feature in self.cat_features:
+                        X.loc[
+                            np.isin(
+                                X[feature], bin_values["bin"]
+                            ), new_feature
+                        ] = bin_values["woe"]
+                    else:
+                        X.loc[
+                            np.logical_and(
+                                X[feature] >= np.min(bin_values["bin"]),
+                                X[feature] < np.max(bin_values["bin"]),
+                            ),
+                            new_feature,
+                        ] = bin_values["woe"]
+            if self.WOE_IV_dict[i]["missing_bin"] == 'first':
+                X[new_feature].fillna(
+                    self.WOE_IV_dict[i][feature][0]["woe"],
+                    inplace=True
+                )
+            if self.WOE_IV_dict[i]["missing_bin"] == 'last':
+                X[new_feature].fillna(
+                    self.WOE_IV_dict[i][feature][-1]["woe"],
+                    inplace=True
+                )
+            if not self.safe_original_data:
+                del X[feature]
 
         return X
+
 
     def fit_transform(
         self,
         X: Union[pd.DataFrame, np.ndarray],
         y: Union[pd.Series, np.ndarray],
-        hight_IV_threshold: float = 0.02,
-        suffix: str = "_WOE",
     ):
         self.fit(X=X, y=y)
-        X = self.transform(
-            X=X, y=y, hight_IV_threshold=hight_IV_threshold, suffix=suffix
-        )
+        X = self.transform(X=X)
 
         return X
 
-    def _check_inputs(
-        self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.DataFrame, np.ndarray]
+
+    def _check_inputs(self,
+        X: Union[pd.DataFrame, np.ndarray],
+        y: Union[pd.DataFrame, np.ndarray]
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Check input data
@@ -190,6 +190,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             y_numeric=True,
         )
         return X, y
+
 
     def _print(self, msg: str):
         if self.verbose:
