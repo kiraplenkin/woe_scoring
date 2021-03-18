@@ -16,6 +16,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         verbose: bool = False,
         prefix: str = "WOE_",
         cat_features: List = None,
+        special_cols: List = None,
         cat_features_threshold: int = 0,
         safe_original_data: bool = False,
     ):
@@ -25,25 +26,16 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 
         TODO: add n_jobs
         """
-        self.n_finale = n_finale
         self.max_bins = max_bins
         self.min_pcnt_group = min_pcnt_group
         self.cat_features = cat_features if cat_features else []
-        self.cat_features_threshold = cat_features_threshold
-        self.missing_mask = missing_mask
-        self.cat_features_temperature = cat_features_temperature
-        self.specials = specials if specials else []
-        self.verbose = verbose
-
-        self.max_bins = max_bins
-        self.min_pcnt_group = min_pcnt_group
-        self.cat_features = cat_features if cat_features else []
+        self.special_cols = special_cols if special_cols else []
         self.cat_features_threshold = cat_features_threshold
         self.verbose = verbose
         self.prefix = prefix
         self.safe_original_data = safe_original_data
 
-        self.WOE_IV_dict = []
+        self.WOE_IV_dict = []  # self.transformers
         self.feature_names = []
         self.num_features = []
 
@@ -55,9 +47,11 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         :return: self
         """
         if isinstance(X, pd.DataFrame):
+            if self.special_cols:
+                X = X.drop(self.special_cols, axis=1)
             self.feature_names = X.columns
         elif isinstance(X, np.ndarray):
-            self.feature_names = ["X%i" for i in range(X.shape[-1])]
+            self.feature_names = [f"X_{i}" for i in range(X.shape[-1])]
         else:
             raise TypeError("X vector is not np array neither data frame")
 
@@ -79,38 +73,30 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             ]
             for feature in self.cat_features:
                 feature_idx = list(self.feature_names).index(feature)
-                self._print(f"Preparing {feature} feature")
+                self._print(f"Exploring {feature} feature")
+                res_dict, missing_position = cat_bining(
+                    X=X[:, feature_idx],
+                    y=y,
+                    min_pcnt_group=self.min_pcnt_group,
+                    max_bins=self.max_bins,
+                )
                 self.WOE_IV_dict.append(
-                    {
-                        feature: cat_bining(
-                            X=X[:, feature_idx],
-                            y=y,
-                            min_pcnt_group=self.min_pcnt_group,
-                            max_bins=self.max_bins,
-                        )
-                    }
+                    {feature: res_dict, "missing_bin": missing_position}
                 )
         else:
             self.num_features = self.feature_names
 
         for feature in self.num_features:
             feature_idx = list(self.feature_names).index(feature)
-            self._print(f"Preparing {feature} feature")
+            self._print(f"Exploring {feature} feature")
+            res_dict, missing_position = num_bining(
+                X=X[:, feature_idx].astype(float),
+                y=y,
+                min_pcnt_group=self.min_pcnt_group,
+                max_bins=self.max_bins,
+            )
             self.WOE_IV_dict.append(
-                {
-                    feature: num_bining(
-                        X=X[:, feature_idx],
-                        y=y,
-                        min_pcnt_group=self.min_pcnt_group,
-                        max_bins=self.max_bins,
-                    )[0],
-                    "missing_bin": num_bining(
-                        X=X[:, feature_idx],
-                        y=y,
-                        min_pcnt_group=self.min_pcnt_group,
-                        max_bins=self.max_bins,
-                    )[1],
-                }
+                {feature: res_dict, "missing_bin": missing_position}
             )
 
         return self
@@ -121,30 +107,48 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         :param X: X data array
         :return: transformed data
         """
-        for i, feature in enumerate(self.feature_names):
+        for i, _ in enumerate(self.WOE_IV_dict):
+            feature = list(self.WOE_IV_dict[i])[0]
+            self._print(f"Preparing {feature} feature")
             new_feature = self.prefix + feature
-            if list(self.WOE_IV_dict[i])[0] == feature:
-                for bin_values in self.WOE_IV_dict[i][feature]:
-                    if feature in self.cat_features:
-                        X.loc[
-                            np.isin(X[feature], bin_values["bin"]), new_feature
-                        ] = bin_values["woe"]
-                    else:
-                        X.loc[
-                            np.logical_and(
-                                X[feature] >= np.min(bin_values["bin"]),
-                                X[feature] < np.max(bin_values["bin"]),
-                            ),
-                            new_feature,
-                        ] = bin_values["woe"]
-            if self.WOE_IV_dict[i]["missing_bin"] == "first":
-                X[new_feature].fillna(
-                    self.WOE_IV_dict[i][feature][0]["woe"], inplace=True
-                )
-            if self.WOE_IV_dict[i]["missing_bin"] == "last":
-                X[new_feature].fillna(
-                    self.WOE_IV_dict[i][feature][-1]["woe"], inplace=True
-                )
+            for bin_values in self.WOE_IV_dict[i][feature]:
+                if feature in self.cat_features:
+                    X.loc[
+                        np.isin(X[feature], bin_values["bin"]), new_feature
+                    ] = bin_values["woe"]
+                else:
+                    X.loc[
+                        np.logical_and(
+                            X[feature] >= np.min(bin_values["bin"]),
+                            X[feature] < np.max(bin_values["bin"]),
+                        ),
+                        new_feature,
+                    ] = bin_values["woe"]
+            if feature in self.cat_features:
+                try:
+                    X[new_feature].fillna(
+                        self.WOE_IV_dict[i][feature][
+                            [
+                                idx
+                                for idx, feature_bins in enumerate(
+                                    self.WOE_IV_dict[i][feature]
+                                )
+                                if "Missing" in feature_bins["bin"]
+                            ][0]
+                        ]["woe"],
+                        inplace=True,
+                    )
+                except IndexError:
+                    pass
+            else:
+                if self.WOE_IV_dict[i]["missing_bin"] == "first":
+                    X[new_feature].fillna(
+                        self.WOE_IV_dict[i][feature][0]["woe"], inplace=True
+                    )
+                if self.WOE_IV_dict[i]["missing_bin"] == "last":
+                    X[new_feature].fillna(
+                        self.WOE_IV_dict[i][feature][-1]["woe"], inplace=True
+                    )
             if not self.safe_original_data:
                 del X[feature]
 
