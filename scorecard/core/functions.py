@@ -215,7 +215,6 @@ def cat_bining(
 
     if len(y[pd.isna(X)]) > 0:
         na_bad_rate = y[pd.isna(X)].sum() / len(y[pd.isna(X)])
-        print("Missing")
         if abs(na_bad_rate - bad_rates[0]["bad_rate"]) < abs(
             na_bad_rate - bad_rates[len(bad_rates) - 1]["bad_rate"]
         ):
@@ -231,7 +230,6 @@ def cat_bining(
     if len(bins) <= 2:
         return bad_rates, missing_bin
 
-    print("len bins", len(bins))
     if len(bins) > max_bins:
         bad_rate_list = [bad_rate["bad_rate"] for bad_rate in bad_rates]
         q_list = [0]
