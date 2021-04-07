@@ -8,7 +8,7 @@ with open('README.md') as f:
     LONG_DESCRIPTION = f.read()
 
 MAINTAINER = "Stroganov Kirill"
-MAINTAINER_EMAIL = "kiraplenkin@gmail.com'"
+MAINTAINER_EMAIL = "kiraplenkin@gmail.com"
 URL = "https://github.com/kiraplenkin"
 DOWNLOAD_URL = "https://pypi.org/project/woe-scoring/#files"
 LICENSE = "MIT"
