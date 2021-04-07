@@ -10,7 +10,7 @@ with open('README.md') as f:
 MAINTAINER = "Stroganov Kirill"
 MAINTAINER_EMAIL = "kiraplenkin@gmail.com'"
 URL = "https://github.com/kiraplenkin"
-DOWNLOAD_URL = "https://pypi.org/project/scorecard/#files"
+DOWNLOAD_URL = "https://pypi.org/project/woe-scoring/#files"
 LICENSE = "MIT"
 
 setup(
@@ -21,7 +21,7 @@ setup(
     author="Stroganov Kirill",
     author_email="kiraplenkin@gmail.com",
     url="https://github.com/kiraplenkin",
-    download_url="https://github.com/kiraplenkin/scorecard/archive/v0.1.2.tar.gz",
+    download_url="https://github.com/kiraplenkin/woe-scoring/archive/refs/tags/v0.1.3.tar.gz",
     license='',
     packages=find_packages(),
     include_package_data=True,
