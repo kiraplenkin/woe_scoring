@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
-from scorecard import __version__
+from woe_scoring import __version__
 
-DISTNAME = 'scorecard'
+DISTNAME = 'woe_scoring'
 DESCRIPTION = 'Weight Of Evidence Transformer and LogisticRegression model with scikit-learn API'
 
 with open('README.md') as f:
@@ -14,14 +14,14 @@ DOWNLOAD_URL = "https://pypi.org/project/woe-scoring/#files"
 LICENSE = "MIT"
 
 setup(
-    name="scorecard",
+    name=DISTNAME,
     version=__version__,
     description="LogisticRegression model on Weight Of Evidence transformated variables",
     long_description='',
-    author="Stroganov Kirill",
-    author_email="kiraplenkin@gmail.com",
-    url="https://github.com/kiraplenkin",
-    download_url="https://github.com/kiraplenkin/woe-scoring/archive/refs/tags/v0.1.3.tar.gz",
+    author=MAINTAINER,
+    author_email=MAINTAINER_EMAIL,
+    url=URL,
+    download_url="https://github.com/kiraplenkin/woe_scoring/archive/refs/tags/v0.1.3.tar.gz",
     license='',
     packages=find_packages(),
     include_package_data=True,
