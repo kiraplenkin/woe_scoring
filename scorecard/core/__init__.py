@@ -1,1 +1,1 @@
-from scorecard.core.main import WOETransformer
+from scorecard.core.main import WOETransformer, CreateModel
