@@ -1,3 +1,56 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 # WOE-Scoring
 Monotone Weight Of Evidence Transformer and LogisticRegression model with scikit-learn API
+
+# Quickstart
+
+1. Install the package:
+```bash
+pip install woe-scoring
+```
+
+2. Use WOETransformer:
+```python
+import pandas as pd
+from woe_scoring import WOETransformer
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+
+df = pd.read_csv('titanic_data.csv')
+train, test = train_test_split(
+    df, test_size=0.3, random_state=42, stratify=df["Survived"]
+)
+
+special_cols = [
+    "PassengerId",
+    "Survived",
+    "Name",
+    "Ticket",
+    "Cabin",
+]
+
+cat_cols = [
+    "Pclass",
+    "Sex",
+    "SibSp",
+    "Parch",
+    "Embarked",
+]
+
+encoder = WOETransformer(
+    max_bins=8,
+    min_pcnt_group=0.1,
+    cat_features=cat_cols,
+    special_cols=special_cols
+)
+
+encoder.fit(train, train["Survived"])
+encoder.save("train_dict.json")
+
+enc_train = encoder.transform(train.drop(special_cols, axis=1))
+enc_test = encoder.transform(test.drop(special_cols, axis=1))
+
+model = LogisticRegression()
+model.fit(enc_train, train["Survived"])
+test_proba = model.predict_proba(enc_test)[:, 1]
+```
