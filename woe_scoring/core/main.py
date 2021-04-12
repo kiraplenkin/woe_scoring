@@ -1,16 +1,17 @@
 import json
-from numpy.lib.npyio import save
-import pandas as pd
+from typing import Union, List, Tuple
+
 import numpy as np
+import pandas as pd
 import statsmodels.api as sm
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.utils.validation import check_X_y, check_array
-from sklearn.utils.multiclass import type_of_target, unique_labels
 from sklearn.feature_selection import SequentialFeatureSelector
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.metrics import roc_auc_score
-from typing import Union, List, Tuple
+from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.utils.multiclass import type_of_target, unique_labels
+from sklearn.utils.validation import check_X_y, check_array
+
 from .functions import cat_bining, num_bining, refit_WOE_dict
 
 
@@ -28,15 +29,15 @@ class NpEncoder(json.JSONEncoder):
 
 class WOETransformer(BaseEstimator, TransformerMixin):
     def __init__(
-        self,
-        max_bins: int = 10,
-        min_pcnt_group: float = 0.05,
-        verbose: bool = False,
-        prefix: str = "WOE_",
-        cat_features: List = None,
-        special_cols: List = None,
-        cat_features_threshold: int = 0,
-        safe_original_data: bool = False,
+            self,
+            max_bins: int = 10,
+            min_pcnt_group: float = 0.05,
+            verbose: bool = False,
+            prefix: str = "WOE_",
+            cat_features: List = None,
+            special_cols: List = None,
+            cat_features_threshold: int = 0,
+            safe_original_data: bool = False,
     ):
         """
         Performs the Weight Of Evidence transformation over the input X features using information from y vector.
@@ -53,7 +54,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         self.prefix = prefix
         self.safe_original_data = safe_original_data
 
-        self.WOE_IV_dict = []  # self.transformers
+        self.WOE_IV_dict = []
         self.feature_names = []
         self.num_features = []
 
@@ -81,9 +82,9 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         if len(self.cat_features) == 0 and self.cat_features_threshold > 0:
             for i in range(len(self.feature_names)):
                 if (
-                    type(X[0, i]) == np.dtype("object")
-                    or type(X[0, i]) == np.dtype("str")
-                    or len(np.unique(X[:, i])) < self.cat_features_threshold
+                        type(X[0, i]) == np.dtype("object")
+                        or type(X[0, i]) == np.dtype("str")
+                        or len(np.unique(X[:, i])) < self.cat_features_threshold
                 ):
                     self.cat_features.append(self.feature_names[i])
         if len(self.cat_features) > 0:
@@ -160,8 +161,8 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                             [
                                 idx
                                 for idx, feature_bins in enumerate(
-                                    self.WOE_IV_dict[i][feature]
-                                )
+                                self.WOE_IV_dict[i][feature]
+                            )
                                 if "Missing" in feature_bins["bin"]
                             ][0]
                         ]["woe"],
@@ -179,8 +180,8 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                         self.WOE_IV_dict[i][feature][-1]["woe"], inplace=True
                     )
             if (
-                self.WOE_IV_dict[i][feature][0]["woe"]
-                < self.WOE_IV_dict[i][feature][-1]["woe"]
+                    self.WOE_IV_dict[i][feature][0]["woe"]
+                    < self.WOE_IV_dict[i][feature][-1]["woe"]
             ):
                 X[new_feature].fillna(
                     self.WOE_IV_dict[i][feature][0]["woe"], inplace=True
@@ -195,15 +196,14 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         return X
 
     def fit_transform(
-        self,
-        X: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.Series, np.ndarray],
+            self,
+            X: Union[pd.DataFrame, np.ndarray],
+            y: Union[pd.Series, np.ndarray],
     ):
         self.fit(X=X, y=y)
         X = self.transform(X=X)
 
         return X
-
 
     def save(self, path: str) -> None:
         with open(path, "w") as file:
@@ -251,9 +251,8 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         self.WOE_IV_dict = self.temp_WOE_IV_dict
         del self.temp_WOE_IV_dict
 
-     
     def _check_inputs(
-        self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.DataFrame, np.ndarray]
+            self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.DataFrame, np.ndarray]
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Check input data
@@ -281,19 +280,19 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 
 class CreateModel(BaseEstimator, TransformerMixin):
     def __init__(
-        self,
-        max_vars: int = 20,
-        verbose: bool = False,
-        special_cols: List = None,
-        n_jobs: int = None,
-        gini_threshold: float = 5.0,
-        delta_train_test_threshold: float = 0.2,
-        random_state: int = None,
-        class_weight: str = None,
-        direction: str = "forward",
-        cv: int = 3,
-        scoring: str = "roc_auc",
-        save_report: bool = True,
+            self,
+            max_vars: int = 20,
+            verbose: bool = False,
+            special_cols: List = None,
+            n_jobs: int = None,
+            gini_threshold: float = 5.0,
+            delta_train_test_threshold: float = 0.2,
+            random_state: int = None,
+            class_weight: str = None,
+            direction: str = "forward",
+            cv: int = 3,
+            scoring: str = "roc_auc",
+            save_report: bool = True,
     ):
 
         self.max_vars = max_vars
@@ -325,17 +324,17 @@ class CreateModel(BaseEstimator, TransformerMixin):
         to_drop = []
         for i in range(len(self.feature_names)):
             if (
-                self._calc_score(
-                    X,
-                    y,
-                    self.feature_names[i],
-                    self.random_state,
-                    self.class_weight,
-                    self.cv,
-                    self.scoring,
-                    self.n_jobs,
-                )
-                < self.gini_threshold
+                    self._calc_score(
+                        X,
+                        y,
+                        self.feature_names[i],
+                        self.random_state,
+                        self.class_weight,
+                        self.cv,
+                        self.scoring,
+                        self.n_jobs,
+                    )
+                    < self.gini_threshold
             ):
                 to_drop.append(self.feature_names[i])
 
@@ -392,18 +391,18 @@ class CreateModel(BaseEstimator, TransformerMixin):
         for var_a in self.feature_names:
             for var_b in self.feature_names:
                 if (
-                    var_a != var_b
-                    and abs(X[self.feature_names].corr()[var_a][var_b]) > 0.5
+                        var_a != var_b
+                        and abs(X[self.feature_names].corr()[var_a][var_b]) > 0.5
                 ):
                     if self._calc_score(
-                        X,
-                        y,
-                        var_a,
-                        self.random_state,
-                        self.class_weight,
-                        self.cv,
-                        self.scoring,
-                        self.n_jobs,
+                            X,
+                            y,
+                            var_a,
+                            self.random_state,
+                            self.class_weight,
+                            self.cv,
+                            self.scoring,
+                            self.n_jobs,
                     ) > self._calc_score(
                         X,
                         y,
@@ -431,8 +430,11 @@ class CreateModel(BaseEstimator, TransformerMixin):
             temp_model = sm.Logit(y, sm.add_constant(X[self.feature_names])).fit()
 
         if self.save_report:
-            with open("./model_summary.txt", "w") as fh:
-                fh.write(temp_model.summary().as_text())
+            with open("model_summary.txt", "w") as f:
+                f.write(temp_model.summary().as_text())
+
+            with open("model_wald.txt", "w") as f:
+                f.write(temp_model.wald_test_terms().as_text())
 
         self.model = LogisticRegression(
             random_state=self.random_state,
@@ -441,28 +443,46 @@ class CreateModel(BaseEstimator, TransformerMixin):
         )
         self.model.fit(X[self.feature_names], y)
 
-        return self.feature_names
+        return self
 
-    def predict(self, X: pd.DataFrame):
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
         X = check_array(X)
         prediction = self.model.predict(X)
         return prediction
 
-    def predict_proba(self, X: pd.DataFrame):
+    def predict_proba(self, X: pd.DataFrame) -> List[float]:
         X = check_array(X)
         predict_proba = self.model.predict_proba(X)
         return predict_proba
 
+    def fit_predict(
+            self,
+            X: pd.DataFrame,
+            y: Union[pd.Series, np.ndarray]
+    ) -> np.ndarray:
+        self.fit(X=X, y=y)
+        prediction = self.predict(X=X)
+        return prediction
+
+    def fit_predict_proba(
+            self,
+            X: pd.DataFrame,
+            y: Union[pd.Series, np.ndarray]
+    ) -> List[float]:
+        self.fit(X=X, y=y)
+        predict_proba = self.predict_proba(X)
+        return predict_proba
+
     def _calc_score(
-        self,
-        X: pd.DataFrame,
-        y: Union[pd.Series, np.ndarray],
-        var: str,
-        random_state: int = None,
-        class_weight: str = None,
-        cv: int = 3,
-        scoring: str = "roc_auc",
-        n_jobs: int = None,
+            self,
+            X: pd.DataFrame,
+            y: Union[pd.Series, np.ndarray],
+            var: str,
+            random_state: int = None,
+            class_weight: str = None,
+            cv: int = 3,
+            scoring: str = "roc_auc",
+            n_jobs: int = None,
     ) -> float:
         model = LogisticRegression(
             random_state=random_state,
@@ -480,7 +500,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
         return (np.mean(scores) * 2 - 1) * 100
 
     def _check_inputs(
-        self, X: pd.DataFrame, y: Union[pd.DataFrame, np.ndarray]
+            self, X: pd.DataFrame, y: Union[pd.DataFrame, np.ndarray]
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Check input data

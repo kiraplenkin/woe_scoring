@@ -3,5 +3,7 @@
 __pycache__/
 data/
 notebook/
+venv/
+.idea/
 
 test.py
