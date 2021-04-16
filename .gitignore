@@ -5,5 +5,6 @@ data/
 notebook/
 venv/
 .idea/
+core/.mypy_cache/
 
 test.py
