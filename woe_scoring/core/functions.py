@@ -16,17 +16,19 @@ def _chi2(bad_rates: Dict, overall_rate: float) -> float:
     return chi2
 
 
-def _check_diff_woe(bad_rates):
+def _check_diff_woe(bad_rates: Dict, diff_woe_threshold: float):
     woe_delta = [
         abs(bad_rates[i]["woe"] - bad_rates[i - 1]["woe"])
         for i in range(1, len(bad_rates))
     ]
-    for i, delta in enumerate(woe_delta):
-        if delta < 0.07:
-            return i
+    min_diff_woe = min(sorted(list(set(woe_delta))))
+    if min_diff_woe < diff_woe_threshold:
+        return woe_delta.index(min_diff_woe)
+    else:
+        return None
 
 
-def _mono_flags(bad_rates):
+def _mono_flags(bad_rates: Dict):
     bad_rate_not_monotone_flags = [
         (
             bad_rates[i]["bad_rate"] < bad_rates[i + 1]["bad_rate"]
@@ -41,7 +43,7 @@ def _mono_flags(bad_rates):
     return bad_rate_not_monotone_flags
 
 
-def _merge_bins_chi(X, y, bad_rates, bins):
+def _merge_bins_chi(X: np.ndarray, y: np.ndarray, bad_rates: Dict, bins: List):
     idx = _mono_flags(bad_rates).index(True)
     if idx == 0:
         del bins[1]
@@ -66,7 +68,9 @@ def _merge_bins_chi(X, y, bad_rates, bins):
     return bad_rates, bins
 
 
-def _merge_bins_min_pcnt(X, y, bad_rates, bins, cat: bool = False):
+def _merge_bins_min_pcnt(
+    X: np.ndarray, y: np.ndarray, bad_rates: Dict, bins: List, cat: bool = False
+):
     idx = [
         pcnt for pcnt in [bad_rates[i]["pcnt"] for i in range(len(bad_rates))]
     ].index(min([bad_rate["pcnt"] for bad_rate in bad_rates]))
@@ -165,11 +169,18 @@ def cat_bining(
     y: np.ndarray,
     min_pcnt_group: float,
     max_bins: int,
+    diff_woe_threshold: float,
 ) -> Dict:
     missing_bin = None
-    X = X.astype(object)
-    bins = list([bin] for bin in np.unique(X[~pd.isna(X)]))
 
+    try:
+        X = X.astype(float)
+        data_type = "float"
+    except ValueError:
+        X = X.astype(object)
+        data_type = "object"
+
+    bins = list([bin] for bin in np.unique(X[~pd.isna(X)]))
     bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
     bins = [bad_rate["bin"] for bad_rate in bad_rates]
 
@@ -194,16 +205,59 @@ def cat_bining(
                         bins.append([])
                         bins[i] += bad_rates[n]["bin"]
 
-    bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
-    bins = [bad_rate["bin"] for bad_rate in bad_rates]
+        bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
+        bins = [bad_rate["bin"] for bad_rate in bad_rates]
 
-    idx = _check_diff_woe(bad_rates)
+    if len(y[pd.isna(X)]) > 0:
+        if len(bins) < 2:
+            bins.append([])
+            if data_type == "object":
+                bins[1] += ["Missing"]
+                X[pd.isna(X)] = "Missing"
+            else:
+                bins[1] += [-1]
+                X[pd.isna(X)] = -1
+            bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
+            if bad_rates[0]["bin"][0] == "Missing" or bad_rates[0]["bin"][0] == -1:
+                missing_bin = "first"
+            else:
+                missing_bin = "last"
+        else:
+            na_bad_rate = y[pd.isna(X)].sum() / len(y[pd.isna(X)])
+            if abs(na_bad_rate - bad_rates[0]["bad_rate"]) < abs(
+                na_bad_rate - bad_rates[len(bad_rates) - 1]["bad_rate"]
+            ):
+                missing_bin = "first"
+                if data_type == "object":
+                    bad_rates[0]["bin"] += ["Missing"]
+                    X[pd.isna(X)] = "Missing"
+                else:
+                    bad_rates[0]["bin"] += [-1]
+                    X[pd.isna(X)] = -1
+            else:
+                missing_bin = "last"
+                if data_type == "object":
+                    bad_rates[-1]["bin"] += ["Missing"]
+                    X[pd.isna(X)] = "Missing"
+                else:
+                    bad_rates[-1]["bin"] += [-1]
+                    X[pd.isna(X)] = -1
+            bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
+            bins = [bad_rate["bin"] for bad_rate in bad_rates]
+
+    if len(bins) == 2:
+        return bad_rates, missing_bin
+
+    idx = _check_diff_woe(bad_rates, diff_woe_threshold)
     while idx is not None and len(bins) > 2:
         bins[idx + 1] += bins[idx]
         del bins[idx]
         bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
         bins = [bad_rate["bin"] for bad_rate in bad_rates]
-        idx = _check_diff_woe(bad_rates)
+        idx = _check_diff_woe(bad_rates, diff_woe_threshold)
+
+    if len(bins) == 2:
+        return bad_rates, missing_bin
 
     while (
         min([bad_rate["pcnt"] for bad_rate in bad_rates]) <= min_pcnt_group
@@ -212,51 +266,9 @@ def cat_bining(
         bad_rates, bins = _merge_bins_min_pcnt(X, y, bad_rates, bins, cat=True)
         bins = [bad_rate["bin"] for bad_rate in bad_rates]
 
-    if len(y[pd.isna(X)]) > 0:
-        if len(bins) < 2:
-            bins.append([])
-            bins[1] += ["Missing"]
-            X[pd.isna(X)] = "Missing"
-            bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
-        else:
-            na_bad_rate = y[pd.isna(X)].sum() / len(y[pd.isna(X)])
-            if abs(na_bad_rate - bad_rates[0]["bad_rate"]) < abs(
-                na_bad_rate - bad_rates[len(bad_rates) - 1]["bad_rate"]
-            ):
-                missing_bin = "first"
-                bad_rates[0]["bin"] += ["Missing"]
-            else:
-                missing_bin = "last"
-                bad_rates[-1]["bin"] += ["Missing"]
-            X[pd.isna(X)] = "Missing"
-            bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
-            bins = [bad_rate["bin"] for bad_rate in bad_rates]
-
-    if len(bins) <= 2:
-        return bad_rates, missing_bin
-
     while len(bad_rates) > max_bins and len(bins) > 2:
         bad_rates, bins = _merge_bins_min_pcnt(X, y, bad_rates, bins, cat=True)
         bins = [bad_rate["bin"] for bad_rate in bad_rates]
-
-    # TODO add proportion_to_dab_rate
-    # proportion from best bin and small pcnt on values
-    # prop = 0
-    # while (prop < temperature and len(bad_rates) > 2):
-    #     for i in range(len(bad_rates)):
-    #         prop = bad_rates[i]['pcnt'] * bad_rates[i]['bad_rate']
-    #         if prop < temperature:
-    #             if bad_rates[len(bad_rates)-1]['pcnt'] \
-    #                 > bad_rates[len(bad_rates)-2]['pcnt']:
-    #                 bins[len(bad_rates)-2] += bins[i]
-    #             else:
-    #                 bins[len(bad_rates)-1] += bins[i]
-    #             del bins[i]
-    #             bad_rates, bins, _ = bin_bad_rate(X=X,
-    #                                               y=y,
-    #                                               bins=bins,
-    #                                               cat=True)
-    #             break
 
     return bad_rates, missing_bin
 
@@ -266,6 +278,7 @@ def num_bining(
     y: np.ndarray,
     min_pcnt_group: float,
     max_bins: int,
+    diff_woe_threshold: float,
 ) -> Dict:
     missing_bin = None
     bins = [np.NINF]
@@ -327,8 +340,10 @@ def num_bining(
     if len(bad_rates) == 2:
         return bad_rates, missing_bin
 
-    while (_check_diff_woe(bad_rates) is not None) and (len(bad_rates) > 2):
-        idx = _check_diff_woe(bad_rates) + 1
+    while (_check_diff_woe(bad_rates, diff_woe_threshold) is not None) and (
+        len(bad_rates) > 2
+    ):
+        idx = _check_diff_woe(bad_rates, diff_woe_threshold) + 1
         del bins[idx]
         bad_rates, _ = bin_bad_rate(X, y, bins)
 

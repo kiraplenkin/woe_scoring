@@ -38,6 +38,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         cat_features: List = None,
         special_cols: List = None,
         cat_features_threshold: int = 0,
+        diff_woe_threshold: float = 0.05,
         safe_original_data: bool = False,
     ):
         """
@@ -51,6 +52,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         self.cat_features = cat_features if cat_features else []
         self.special_cols = special_cols if special_cols else []
         self.cat_features_threshold = cat_features_threshold
+        self.diff_woe_threshold = diff_woe_threshold
         self.verbose = verbose
         self.prefix = prefix
         self.safe_original_data = safe_original_data
@@ -102,6 +104,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                     y=y,
                     min_pcnt_group=self.min_pcnt_group,
                     max_bins=self.max_bins,
+                    diff_woe_threshold=self.diff_woe_threshold,
                 )
                 self.WOE_IV_dict.append(
                     {
@@ -121,6 +124,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 y=y,
                 min_pcnt_group=self.min_pcnt_group,
                 max_bins=self.max_bins,
+                diff_woe_threshold=self.diff_woe_threshold,
             )
             self.WOE_IV_dict.append(
                 {
@@ -155,42 +159,26 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                         ),
                         new_feature,
                     ] = bin_values["woe"]
-            if feature in self.cat_features:
-                try:
-                    X[new_feature].fillna(
-                        self.WOE_IV_dict[i][feature][
-                            [
-                                idx
-                                for idx, feature_bins in enumerate(
-                                    self.WOE_IV_dict[i][feature]
-                                )
-                                if "Missing" in feature_bins["bin"]
-                            ][0]
-                        ]["woe"],
-                        inplace=True,
-                    )
-                except IndexError:
-                    pass
-            else:
-                if self.WOE_IV_dict[i]["missing_bin"] == "first":
-                    X[new_feature].fillna(
-                        self.WOE_IV_dict[i][feature][0]["woe"], inplace=True
-                    )
-                if self.WOE_IV_dict[i]["missing_bin"] == "last":
-                    X[new_feature].fillna(
-                        self.WOE_IV_dict[i][feature][-1]["woe"], inplace=True
-                    )
-            if (
-                self.WOE_IV_dict[i][feature][0]["woe"]
-                < self.WOE_IV_dict[i][feature][-1]["woe"]
-            ):
+            if self.WOE_IV_dict[i]["missing_bin"] == "first":
                 X[new_feature].fillna(
                     self.WOE_IV_dict[i][feature][0]["woe"], inplace=True
                 )
-            else:
+            elif self.WOE_IV_dict[i]["missing_bin"] == "last":
                 X[new_feature].fillna(
                     self.WOE_IV_dict[i][feature][-1]["woe"], inplace=True
                 )
+            else:
+                if (
+                    self.WOE_IV_dict[i][feature][0]["woe"]
+                    < self.WOE_IV_dict[i][feature][-1]["woe"]
+                ):
+                    X[new_feature].fillna(
+                        self.WOE_IV_dict[i][feature][0]["woe"], inplace=True
+                    )
+                else:
+                    X[new_feature].fillna(
+                        self.WOE_IV_dict[i][feature][-1]["woe"], inplace=True
+                    )
             if not self.safe_original_data:
                 del X[feature]
 
@@ -292,9 +280,11 @@ class CreateModel(BaseEstimator, TransformerMixin):
         class_weight: str = None,
         direction: str = "forward",
         cv: int = 3,
+        C: float = None,
         scoring: str = "roc_auc",
-        save_reports: bool = True,
-        path_to_save: str = None,
+        save_report: bool = True,
+        path_to_save: str = os.getcwd(),
+        find_best_params: bool = False,
     ):
 
         self.max_vars = max_vars
@@ -307,9 +297,11 @@ class CreateModel(BaseEstimator, TransformerMixin):
         self.class_weight = class_weight
         self.direction = direction
         self.cv = cv
+        self.C = C
         self.scoring = scoring
-        self.save_reports = save_reports
+        self.save_report = save_report
         self.path_to_save = path_to_save
+        self.find_best_params = find_best_params
 
         self.feature_names = []
         self.model = None
@@ -324,6 +316,9 @@ class CreateModel(BaseEstimator, TransformerMixin):
         else:
             raise TypeError("X vector is not np array neither data frame")
 
+        if self.C is None:
+            self.C = 1.0e4 / X.shape[0]
+
         to_drop = []
         for i in range(len(self.feature_names)):
             if (
@@ -334,6 +329,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
                     self.random_state,
                     self.class_weight,
                     self.cv,
+                    self.C,
                     self.scoring,
                     self.n_jobs,
                 )
@@ -361,6 +357,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
                     random_state=ceed,
                     class_weight=self.class_weight,
                     n_jobs=self.n_jobs,
+                    C=self.C,
                 )
                 LR.fit(temp_train_X, temp_train_y)
                 y_pred_train = LR.predict_proba(temp_train_X)[:, 1]
@@ -380,6 +377,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
                 random_state=self.random_state,
                 class_weight=self.class_weight,
                 n_jobs=self.n_jobs,
+                C=self.C,
             ),
             n_features_to_select=self.max_vars,
             direction=self.direction,
@@ -404,6 +402,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
                         self.random_state,
                         self.class_weight,
                         self.cv,
+                        self.C,
                         self.scoring,
                         self.n_jobs,
                     ) > self._calc_score(
@@ -413,6 +412,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
                         self.random_state,
                         self.class_weight,
                         self.cv,
+                        self.C,
                         self.scoring,
                         self.n_jobs,
                     ):
@@ -449,6 +449,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
             random_state=self.random_state,
             class_weight=self.class_weight,
             n_jobs=self.n_jobs,
+            C=self.C,
         )
         self.model.fit(X[self.feature_names], y)
 
@@ -486,6 +487,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
         random_state: int = None,
         class_weight: str = None,
         cv: int = 3,
+        C: float = None,
         scoring: str = "roc_auc",
         n_jobs: int = None,
     ) -> float:
@@ -493,6 +495,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
             random_state=random_state,
             class_weight=class_weight,
             n_jobs=n_jobs,
+            C=C,
         )
         scores = cross_val_score(
             model,
