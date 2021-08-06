@@ -431,7 +431,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
         if retrain:
             temp_model = sm.Logit(y, sm.add_constant(X[self.feature_names])).fit()
 
-        if self.save_reports:
+        if self.save_report:
             try:
                 with open(
                     os.path.join(self.path_to_save, "model_summary.txt"), "w"
