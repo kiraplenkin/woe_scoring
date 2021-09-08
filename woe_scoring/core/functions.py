@@ -1,12 +1,12 @@
 import copy
+from typing import Any, Dict, List, Optional, Union
+
 import numpy as np
 import pandas as pd
-import warnings
 from scipy.stats import chisquare
-from typing import Dict, List, Tuple
 
 
-def _chi2(bad_rates: Dict, overall_rate: float) -> float:
+def _chi2(bad_rates: List[Dict], overall_rate: float) -> float:
     f_obs = [bin["bad"] for bin in bad_rates]
     f_exp = [bin["total"] * overall_rate for bin in bad_rates]
 
@@ -15,35 +15,30 @@ def _chi2(bad_rates: Dict, overall_rate: float) -> float:
     return chi2
 
 
-def _check_diff_woe(bad_rates: Dict, diff_woe_threshold: float):
-    woe_delta = [
-        abs(bad_rates[i]["woe"] - bad_rates[i - 1]["woe"])
-        for i in range(1, len(bad_rates))
-    ]
+def _check_diff_woe(bad_rates: List[Dict], diff_woe_threshold: float) -> Union[None, int]:
+    woe_delta: np.ndarray = np.abs(np.diff([bad_rate["woe"] for bad_rate in bad_rates]))
     min_diff_woe = min(sorted(list(set(woe_delta))))
     if min_diff_woe < diff_woe_threshold:
-        return woe_delta.index(min_diff_woe)
+        return list(woe_delta).index(min_diff_woe)
     else:
         return None
 
 
-def _mono_flags(bad_rates: Dict):
-    bad_rate_not_monotone_flags = [
-        (
-                bad_rates[i]["bad_rate"] < bad_rates[i + 1]["bad_rate"]
-                and bad_rates[i]["bad_rate"] < bad_rates[i - 1]["bad_rate"]
-        )
-        or (
-                bad_rates[i]["bad_rate"] > bad_rates[i + 1]["bad_rate"]
-                and bad_rates[i]["bad_rate"] > bad_rates[i - 1]["bad_rate"]
-        )
-        for i in range(1, len(bad_rates) - 1)
-    ]
-    return bad_rate_not_monotone_flags
+def _mono_flags(bad_rates: List[Dict]) -> bool:
+    bad_rate_diffs = np.diff([bad_rate["bad_rate"] for bad_rate in bad_rates])
+    positive_mono_diff = np.all(bad_rate_diffs > 0)
+    negative_mono_diff = np.all(bad_rate_diffs < 0)
+    return bool(positive_mono_diff | negative_mono_diff)
 
 
-def _merge_bins_chi(X: np.ndarray, y: np.ndarray, bad_rates: Dict, bins: List):
-    idx = _mono_flags(bad_rates).index(True)
+def _find_index_of_diff_flag(bad_rates: List[Dict]) -> int:
+    bad_rate_diffs = np.diff([bad_rate["bad_rate"] for bad_rate in bad_rates])
+    idx = list(bad_rate_diffs > 0).index(pd.Series(bad_rate_diffs > 0).value_counts().sort_values().index.tolist()[0])
+    return idx
+
+
+def _merge_bins_chi(x: np.ndarray, y: np.ndarray, bad_rates: List[Dict], bins: List):
+    idx = _find_index_of_diff_flag(bad_rates)
     if idx == 0:
         del bins[1]
     elif idx == len(bad_rates) - 2:
@@ -51,19 +46,19 @@ def _merge_bins_chi(X: np.ndarray, y: np.ndarray, bad_rates: Dict, bins: List):
     else:
         temp_bins = copy.deepcopy(bins)
         del temp_bins[idx + 1]
-        temp_bad_rates, temp_overall_rate = bin_bad_rate(X, y, temp_bins)
+        temp_bad_rates, temp_overall_rate = bin_bad_rate(x, y, temp_bins)
         chi_1 = _chi2(temp_bad_rates, temp_overall_rate)
         del temp_bins
 
         temp_bins = copy.deepcopy(bins)
         del temp_bins[idx + 2]
-        temp_bad_rates, temp_overall_rate = bin_bad_rate(X, y, temp_bins)
+        temp_bad_rates, temp_overall_rate = bin_bad_rate(x, y, temp_bins)
         chi_2 = _chi2(temp_bad_rates, temp_overall_rate)
         if chi_1 < chi_2:
             del bins[idx + 1]
         else:
             del bins[idx + 2]
-    bad_rates, _ = bin_bad_rate(X, y, bins)
+    bad_rates, _ = bin_bad_rate(x, y, bins)
     return bad_rates, bins
 
 
@@ -104,7 +99,7 @@ def _merge_bins_min_pcnt(
 
 def bin_bad_rate(
         X: np.ndarray, y: np.ndarray, bins: List, cat: bool = False
-) -> Tuple[Dict, List, float]:
+) -> tuple[list[dict[str, Union[Union[list, int, float], Any]]], Union[Optional[float], Any]]:
     bad_rates = []
     if cat:
         max_idx = len(bins)
@@ -153,14 +148,12 @@ def bin_bad_rate(
 
     overall_rate = None
     if not cat:
-        total, bad = 0, 0
-        for bad_rate_bin in bad_rates:
-            total += bad_rate_bin["total"]
-            bad += bad_rate_bin["bad"]
+        bad = sum([bad_rate["bad"] for bad_rate in bad_rates])
+        total = sum([bad_rate["total"] for bad_rate in bad_rates])
 
         overall_rate = bad * 1.0 / total
 
-    return (bad_rates, overall_rate)
+    return bad_rates, overall_rate
 
 
 def cat_bining(
@@ -278,7 +271,7 @@ def num_bining(
         min_pcnt_group: float,
         max_bins: int,
         diff_woe_threshold: float,
-) -> Dict:
+) -> tuple[list[dict[str, Union[Union[list, int, float], Any]]], Optional[str]]:
     missing_bin = None
     bins = [np.NINF]
     if len(np.unique(X[~pd.isna(X)])) > max_bins:
@@ -349,7 +342,7 @@ def num_bining(
     if len(bad_rates) == 2:
         return bad_rates, missing_bin
 
-    while (True in _mono_flags(bad_rates)) and (len(bad_rates) > 2):
+    while (~_mono_flags(bad_rates)) and (len(bad_rates) > 2):
         bad_rates, bins = _merge_bins_chi(X, y, bad_rates, bins)
 
     return bad_rates, missing_bin
