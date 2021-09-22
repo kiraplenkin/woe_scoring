@@ -7,8 +7,8 @@ from scipy.stats import chisquare
 
 
 def _chi2(bad_rates: List[Dict], overall_rate: float) -> float:
-    f_obs = [bin["bad"] for bin in bad_rates]
-    f_exp = [bin["total"] * overall_rate for bin in bad_rates]
+    f_obs = [_bin["bad"] for _bin in bad_rates]
+    f_exp = [_bin["total"] * overall_rate for _bin in bad_rates]
 
     chi2 = chisquare(f_obs=f_obs, f_exp=f_exp)[0]
 
@@ -62,12 +62,12 @@ def _merge_bins_chi(x: np.ndarray, y: np.ndarray, bad_rates: List[Dict], bins: L
     return bad_rates, bins
 
 
-def _merge_bins_min_pcnt(
-        X: np.ndarray, y: np.ndarray, bad_rates: Dict, bins: List, cat: bool = False
+def _merge_bins_min_pct(
+        x: np.ndarray, y: np.ndarray, bad_rates: List[Dict], bins: List, cat: bool = False
 ):
     idx = [
-        pcnt for pcnt in [bad_rates[i]["pcnt"] for i in range(len(bad_rates))]
-    ].index(min([bad_rate["pcnt"] for bad_rate in bad_rates]))
+        pct for pct in [bad_rates[i]["pct"] for i in range(len(bad_rates))]
+    ].index(min([bad_rate["pct"] for bad_rate in bad_rates]))
 
     if cat:
         if idx == 0:
@@ -75,7 +75,7 @@ def _merge_bins_min_pcnt(
         elif idx == len(bad_rates) - 1:
             bins[idx - 1] += bins[idx]
         else:
-            if bad_rates[idx - 1]["pcnt"] < bad_rates[idx + 1]["pcnt"]:
+            if bad_rates[idx - 1]["pct"] < bad_rates[idx + 1]["pct"]:
                 bins[idx - 1] += bins[idx]
             else:
                 bins[idx + 1] += bins[idx]
@@ -86,19 +86,19 @@ def _merge_bins_min_pcnt(
         elif idx == len(bad_rates) - 1:
             del bins[len(bins) - 2]
         else:
-            if bad_rates[idx - 1]["pcnt"] < bad_rates[idx + 1]["pcnt"]:
+            if bad_rates[idx - 1]["pct"] < bad_rates[idx + 1]["pct"]:
                 del bins[idx]
             else:
                 del bins[idx + 1]
 
-    bad_rates, _ = bin_bad_rate(X, y, bins, cat=cat)
+    bad_rates, _ = bin_bad_rate(x, y, bins, cat=cat)
     if cat:
         bins = [bad_rate["bin"] for bad_rate in bad_rates]
     return bad_rates, bins
 
 
 def bin_bad_rate(
-        X: np.ndarray, y: np.ndarray, bins: List, cat: bool = False
+        x: np.ndarray, y: np.ndarray, bins: List, cat: bool = False
 ) -> tuple[list[dict[str, Union[Union[list, int, float], Any]]], Union[Optional[float], Any]]:
     bad_rates = []
     if cat:
@@ -111,19 +111,19 @@ def bin_bad_rate(
         else:
             value = [bins[i], bins[i + 1]]
 
-        X_not_na = X[~pd.isna(X)]
-        y_not_na = y[~pd.isna(X)]
+        x_not_na = x[~pd.isna(x)]
+        y_not_na = y[~pd.isna(x)]
         if cat:
-            X_isin = X_not_na[pd.Series(X_not_na).isin(value)]
+            x_in = x_not_na[pd.Series(x_not_na).isin(value)]
         else:
-            X_isin = X_not_na[
-                np.where((X_not_na >= np.min(value)) & (X_not_na < np.max(value)))
+            x_in = x_not_na[
+                np.where((x_not_na >= np.min(value)) & (x_not_na < np.max(value)))
             ]
-        total = len(X_isin)
-        all_bad = y[~pd.isna(X)].sum()
-        all_good = len(y[~pd.isna(X)]) - all_bad
-        bad = y_not_na[np.isin(X_not_na, X_isin)].sum()
-        pcnt = np.sum(np.isin(X_not_na, X_isin)) * 1.0 / len(X)
+        total = len(x_in)
+        all_bad = y[~pd.isna(x)].sum()
+        all_good = len(y[~pd.isna(x)]) - all_bad
+        bad = y_not_na[np.isin(x_not_na, x_in)].sum()
+        pct = np.sum(np.isin(x_not_na, x_in)) * 1.0 / len(x)
         bad_rate = bad / total
         good = total - bad
         good_rate = good / total
@@ -136,7 +136,7 @@ def bin_bad_rate(
             "bin": value,
             "total": total,
             "bad": bad,
-            "pcnt": pcnt,
+            "pct": pct,
             "bad_rate": bad_rate,
             "woe": woe,
             "iv": iv,
@@ -144,7 +144,7 @@ def bin_bad_rate(
         bad_rates.append(stats)
 
     if cat:
-        bad_rates.sort(key=lambda x: x["bad_rate"])
+        bad_rates.sort(key=lambda _x: _x["bad_rate"])
 
     overall_rate = None
     if not cat:
@@ -156,85 +156,97 @@ def bin_bad_rate(
     return bad_rates, overall_rate
 
 
-def cat_bining(
-        X: np.ndarray,
+def cat_binning(
+        x: np.ndarray,
         y: np.ndarray,
-        min_pcnt_group: float,
+        min_pct_group: float,
         max_bins: int,
         diff_woe_threshold: float,
-) -> Dict:
+) -> tuple[list[dict[str, Union[Union[list, int, float], Any]]], Optional[str]]:
     missing_bin = None
 
     try:
-        X = X.astype(float)
+        x = x.astype(float)
         data_type = "float"
     except ValueError:
-        X = X.astype(object)
+        x = x.astype(object)
         data_type = "object"
 
-    bins = list([bin] for bin in np.unique(X[~pd.isna(X)]))
-    bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
-    bins = [bad_rate["bin"] for bad_rate in bad_rates]
+    bins = list([bin] for bin in np.unique(x[~pd.isna(x)]))
 
     if len(bins) > max_bins:
-        bad_rate_list = [bad_rate["bad_rate"] for bad_rate in bad_rates]
-        q_list = [0]
+        bad_rates_dict = dict(
+            sorted(
+                {bins[i][0]: y[np.isin(x, bins[i])].sum() / len(y[np.isin(x, bins[i])]) for i in
+                 range(len(bins))}.items(), key=lambda item: item[1]
+            )
+        )
+        bad_rate_list = [bad_rates_dict[i] for i in bad_rates_dict]
+        q_list = [0.0]
         for quantile in range(1, max_bins):
             q_list.append(
                 np.nanquantile(np.array(bad_rate_list), quantile / max_bins, axis=0)
             )
         q_list.append(1)
+        q_list = list(sorted(set(q_list)))
 
-        bins = [copy.deepcopy(bad_rates[0]["bin"])]
+        new_bins = [copy.deepcopy([list(bad_rates_dict.keys())[0]])]
+        start = 1
         for i in range(len(q_list) - 1):
-            for n in range(1, len(bad_rates)):
-                if (bad_rates[n]["bad_rate"] >= q_list[i]) & (
-                        bad_rates[n]["bad_rate"] < q_list[i + 1]
+            for n in range(start, len(list(bad_rates_dict.keys()))):
+                if bad_rate_list[n] >= q_list[i + 1]:
+                    break
+                elif (bad_rate_list[n] >= q_list[i]) & (
+                        bad_rate_list[n] < q_list[i + 1]
                 ):
                     try:
-                        bins[i] += bad_rates[n]["bin"]
+                        new_bins[i] += [list(bad_rates_dict.keys())[n]]
+                        start += 1
                     except IndexError:
-                        bins.append([])
-                        bins[i] += bad_rates[n]["bin"]
+                        new_bins.append([])
+                        new_bins[i] += [list(bad_rates_dict.keys())[n]]
+                        start += 1
 
-        bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
+        bad_rates, _ = bin_bad_rate(x, y, new_bins, cat=True)
         bins = [bad_rate["bin"] for bad_rate in bad_rates]
+    else:
+        bad_rates, _ = bin_bad_rate(x, y, bins, cat=True)
 
-    if len(y[pd.isna(X)]) > 0:
+    if len(y[pd.isna(x)]) > 0:
         if len(bins) < 2:
             bins.append([])
             if data_type == "object":
                 bins[1] += ["Missing"]
-                X[pd.isna(X)] = "Missing"
+                x[pd.isna(x)] = "Missing"
             else:
                 bins[1] += [-1]
-                X[pd.isna(X)] = -1
-            bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
+                x[pd.isna(x)] = -1
+            bad_rates, _ = bin_bad_rate(x, y, bins, cat=True)
             if bad_rates[0]["bin"][0] == "Missing" or bad_rates[0]["bin"][0] == -1:
                 missing_bin = "first"
             else:
                 missing_bin = "last"
         else:
-            na_bad_rate = y[pd.isna(X)].sum() / len(y[pd.isna(X)])
+            na_bad_rate = y[pd.isna(x)].sum() / len(y[pd.isna(x)])
             if abs(na_bad_rate - bad_rates[0]["bad_rate"]) < abs(
                     na_bad_rate - bad_rates[len(bad_rates) - 1]["bad_rate"]
             ):
                 missing_bin = "first"
                 if data_type == "object":
                     bad_rates[0]["bin"] += ["Missing"]
-                    X[pd.isna(X)] = "Missing"
+                    x[pd.isna(x)] = "Missing"
                 else:
                     bad_rates[0]["bin"] += [-1]
-                    X[pd.isna(X)] = -1
+                    x[pd.isna(x)] = -1
             else:
                 missing_bin = "last"
                 if data_type == "object":
                     bad_rates[-1]["bin"] += ["Missing"]
-                    X[pd.isna(X)] = "Missing"
+                    x[pd.isna(x)] = "Missing"
                 else:
                     bad_rates[-1]["bin"] += [-1]
-                    X[pd.isna(X)] = -1
-            bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
+                    x[pd.isna(x)] = -1
+            bad_rates, _ = bin_bad_rate(x, y, bins, cat=True)
             bins = [bad_rate["bin"] for bad_rate in bad_rates]
 
     if len(bins) == 2:
@@ -244,7 +256,7 @@ def cat_bining(
     while idx is not None and len(bins) > 2:
         bins[idx + 1] += bins[idx]
         del bins[idx]
-        bad_rates, _ = bin_bad_rate(X, y, bins, cat=True)
+        bad_rates, _ = bin_bad_rate(x, y, bins, cat=True)
         bins = [bad_rate["bin"] for bad_rate in bad_rates]
         idx = _check_diff_woe(bad_rates, diff_woe_threshold)
 
@@ -252,56 +264,56 @@ def cat_bining(
         return bad_rates, missing_bin
 
     while (
-            min([bad_rate["pcnt"] for bad_rate in bad_rates]) <= min_pcnt_group
+            min([bad_rate["pct"] for bad_rate in bad_rates]) <= min_pct_group
             and len(bins) > 2
     ):
-        bad_rates, bins = _merge_bins_min_pcnt(X, y, bad_rates, bins, cat=True)
+        bad_rates, bins = _merge_bins_min_pct(x, y, bad_rates, bins, cat=True)
         bins = [bad_rate["bin"] for bad_rate in bad_rates]
 
     while len(bad_rates) > max_bins and len(bins) > 2:
-        bad_rates, bins = _merge_bins_min_pcnt(X, y, bad_rates, bins, cat=True)
+        bad_rates, bins = _merge_bins_min_pct(x, y, bad_rates, bins, cat=True)
         bins = [bad_rate["bin"] for bad_rate in bad_rates]
 
     return bad_rates, missing_bin
 
 
-def num_bining(
-        X: np.ndarray,
+def num_binning(
+        x: np.ndarray,
         y: np.ndarray,
-        min_pcnt_group: float,
+        min_pct_group: float,
         max_bins: int,
         diff_woe_threshold: float,
 ) -> tuple[list[dict[str, Union[Union[list, int, float], Any]]], Optional[str]]:
     missing_bin = None
     bins = [np.NINF]
-    if len(np.unique(X[~pd.isna(X)])) > max_bins:
+    if len(np.unique(x[~pd.isna(x)])) > max_bins:
         for quantile in range(1, max_bins):
-            bins.append(np.nanquantile(X, quantile / max_bins, axis=0))
+            bins.append(np.nanquantile(x, quantile / max_bins, axis=0))
         bins = list(np.unique(bins))
         if len(bins) == 2:
-            bins.append(np.unique(X[~pd.isna(X)])[1])
+            bins.append(np.unique(x[~pd.isna(x)])[1])
     else:
-        for value in sorted(np.unique(X[~pd.isna(X)])):
+        for value in sorted(np.unique(x[~pd.isna(x)])):
             bins.append(value)
 
     bins.append(np.inf)
 
-    bad_rates, _ = bin_bad_rate(X, y, bins)
+    bad_rates, _ = bin_bad_rate(x, y, bins)
 
     if (pd.isna(bad_rates[0]["bad_rate"])) and (len(bad_rates) > 2):
         del bins[1]
-        bad_rates, _ = bin_bad_rate(X, y, bins)
+        bad_rates, _ = bin_bad_rate(x, y, bins)
 
-    if len(y[pd.isna(X)]) > 0:
-        na_bad_rate = y[pd.isna(X)].sum() / len(y[pd.isna(X)])
+    if len(y[pd.isna(x)]) > 0:
+        na_bad_rate = y[pd.isna(x)].sum() / len(y[pd.isna(x)])
         if len(bad_rates) == 2:
             if na_bad_rate < bad_rates[1]["bad_rate"]:
-                X = np.nan_to_num(X, nan=np.amin(X[~pd.isna(X)]) - 1)
-                bins = [np.NINF, np.amin(X[~pd.isna(X)])] + bins[1:]
+                x = np.nan_to_num(x, nan=np.amin(x[~pd.isna(x)]) - 1)
+                bins = [np.NINF, np.amin(x[~pd.isna(x)])] + bins[1:]
                 missing_bin = "first"
             else:
-                X = np.nan_to_num(X, nan=np.amax(X[~pd.isna(X)]) + 1)
-                bins = bins[:2] + [np.amax(X[~pd.isna(X)]), np.inf]
+                x = np.nan_to_num(x, nan=np.amax(x[~pd.isna(x)]) + 1)
+                bins = bins[:2] + [np.amax(x[~pd.isna(x)]), np.inf]
                 missing_bin = "last"
         elif abs(
                 na_bad_rate
@@ -314,20 +326,20 @@ def num_bining(
                 [bad_rate["bad_rate"] for bad_rate in bad_rates[len(bad_rates) // 2:]]
             )
         ):
-            X = np.nan_to_num(X, nan=np.amin(X[~pd.isna(X)]))
+            x = np.nan_to_num(x, nan=np.amin(x[~pd.isna(x)]))
             missing_bin = "first"
         else:
-            X = np.nan_to_num(X, nan=np.amax(X[~pd.isna(X)]))
+            x = np.nan_to_num(x, nan=np.amax(x[~pd.isna(x)]))
             missing_bin = "last"
-        bad_rates, _ = bin_bad_rate(X, y, bins)
+        bad_rates, _ = bin_bad_rate(x, y, bins)
 
     if len(bad_rates) == 2:
         return bad_rates, missing_bin
 
-    while (min([bad_rate["pcnt"] for bad_rate in bad_rates]) <= min_pcnt_group) and (
+    while (min([bad_rate["pct"] for bad_rate in bad_rates]) <= min_pct_group) and (
             len(bad_rates) > 2
     ):
-        bad_rates, bins = _merge_bins_min_pcnt(X, y, bad_rates, bins)
+        bad_rates, bins = _merge_bins_min_pct(x, y, bad_rates, bins)
 
     if len(bad_rates) == 2:
         return bad_rates, missing_bin
@@ -337,21 +349,23 @@ def num_bining(
     ):
         idx = _check_diff_woe(bad_rates, diff_woe_threshold) + 1
         del bins[idx]
-        bad_rates, _ = bin_bad_rate(X, y, bins)
+        bad_rates, _ = bin_bad_rate(x, y, bins)
 
     if len(bad_rates) == 2:
         return bad_rates, missing_bin
 
     while (~_mono_flags(bad_rates)) and (len(bad_rates) > 2):
-        bad_rates, bins = _merge_bins_chi(X, y, bad_rates, bins)
+        bad_rates, bins = _merge_bins_chi(x, y, bad_rates, bins)
 
     return bad_rates, missing_bin
 
 
-def refit_WOE_dict(X: np.ndarray, y: np.ndarray, bins: List, type_feature: str) -> Dict:
-    cat = False
-    if type_feature == "cat":
-        cat = True
-
-    bad_rates, _ = bin_bad_rate(X, y, bins, cat=cat)
+def refit_woe_dict(x: np.ndarray, y: np.ndarray, bins: List, type_feature: str) -> List[Dict]:
+    cat = False if type_feature != "cat" else True
+    if cat:
+        try:
+            x = x.astype(float)
+        except ValueError:
+            x = x.astype(object)
+    bad_rates, _ = bin_bad_rate(x, y, bins, cat=cat)
     return bad_rates
