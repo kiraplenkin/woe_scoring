@@ -157,8 +157,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 }
             )
 
-        return self
-
     def transform(self, x: pd.DataFrame):
         """
         Transforms input arrays
@@ -220,6 +218,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             if self.special_cols:
                 x = x.drop(self.special_cols, axis=1)
             self.feature_names = x.columns
+            self.feature_names = [col.replace("WOE_", "") for col in self.feature_names]
         elif isinstance(x, np.ndarray):
             self.feature_names = [f"X_{i}" for i in range(x.shape[-1])]
         else:
@@ -293,6 +292,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
             max_vars: int = 20,
             verbose: bool = False,
             special_cols: List = None,
+            unused_cols: List = None,
             n_jobs: int = None,
             gini_threshold: float = 5.0,
             delta_train_test_threshold: float = 0.2,
@@ -300,7 +300,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
             class_weight: str = None,
             direction: str = "forward",
             cv: int = 3,
-            c: float = None,
+            C: float = None,
             scoring: str = "roc_auc",
             save_report: bool = True,
             path_to_save: str = os.getcwd(),
@@ -310,6 +310,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
         self.max_vars = max_vars
         self.verbose = verbose
         self.special_cols = special_cols
+        self.unused_cols = unused_cols
         self.n_jobs = n_jobs
         self.gini_threshold = gini_threshold
         self.delta_train_test_threshold = delta_train_test_threshold
@@ -317,7 +318,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
         self.class_weight = class_weight
         self.direction = direction
         self.cv = cv
-        self.C = c
+        self.C = C
         self.scoring = scoring
         self.save_report = save_report
         self.path_to_save = path_to_save
@@ -329,7 +330,9 @@ class CreateModel(BaseEstimator, TransformerMixin):
     def fit(self, x: pd.DataFrame, y: Union[pd.Series, np.ndarray]):
         if isinstance(x, pd.DataFrame):
             if self.special_cols:
-                x = x.drop(self.special_cols, axis=1)
+                x = x.drop(self.special_cols + self.unused_cols, axis=1)
+            else:
+                x = x.drop(self.unused_cols, axis=1)
             self.feature_names = x.columns
         elif isinstance(x, np.ndarray):
             self.feature_names = [f"X_{i}" for i in range(x.shape[-1])]
