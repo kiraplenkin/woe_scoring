@@ -241,13 +241,14 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                     _bin["bin"]
                     for _bin in self.WOE_IV_dict[i][list(self.WOE_IV_dict[i].keys())[0]]
                 ],
-                type_feature=self.WOE_IV_dict[0]["type_feature"],
+                type_feature=self.WOE_IV_dict[i]["type_feature"],
+                missing_bin=self.WOE_IV_dict[i]["missing_bin"]
             )
             self.temp_WOE_IV_dict.append(
                 {
                     list(self.WOE_IV_dict[i].keys())[0]: res_dict,
                     "missing_bin": self.WOE_IV_dict[i]["missing_bin"],
-                    "type_feature": self.WOE_IV_dict[0]["type_feature"],
+                    "type_feature": self.WOE_IV_dict[i]["type_feature"],
                 }
             )
         self.WOE_IV_dict = self.temp_WOE_IV_dict

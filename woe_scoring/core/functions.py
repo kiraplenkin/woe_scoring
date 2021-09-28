@@ -360,12 +360,22 @@ def num_binning(
     return bad_rates, missing_bin
 
 
-def refit_woe_dict(x: np.ndarray, y: np.ndarray, bins: List, type_feature: str) -> List[Dict]:
-    cat = False if type_feature != "cat" else True
+def refit_woe_dict(x: np.ndarray, y: np.ndarray, bins: List, type_feature: str, missing_bin: str) -> List[Dict]:
+    cat = True if type_feature == "cat" else False
+
     if cat:
         try:
             x = x.astype(float)
+            x[pd.isna(x)] = -1
         except ValueError:
             x = x.astype(object)
+            x[pd.isna(x)] = "Missing"
+    else:
+        if missing_bin == "first":
+            x = np.nan_to_num(x, nan=np.amin(x[~pd.isna(x)]) - 1)
+        elif missing_bin == "last":
+            x = np.nan_to_num(x, nan=np.amax(x[~pd.isna(x)]) + 1)
+        bins = list(set(item for sublist in bins for item in sublist))
+
     bad_rates, _ = bin_bad_rate(x, y, bins, cat=cat)
     return bad_rates
