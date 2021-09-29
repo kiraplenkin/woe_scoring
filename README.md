@@ -84,5 +84,5 @@ model = CreateModel(
     save_report=False
 )
 model.fit(train, train["Survived"])
-test_proba = model.predict_proba(test[model.feature_names_])[:, 1]
+test_proba = model.predict_proba(test[model.feature_names_])
 ```
