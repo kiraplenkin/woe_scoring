@@ -80,7 +80,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         self.prefix = prefix
         self.safe_original_data = safe_original_data
 
-        self.WOE_IV_dict = []
+        self.woe_iv_dict = []
         self.feature_names = []
         self.num_features = []
 
@@ -89,7 +89,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         Fits the input data
         :param x: data matrix
         :param y: target vector
-        :return: self
         """
         if isinstance(x, pd.DataFrame):
             if self.special_cols:
@@ -102,8 +101,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 
         x, y = _check_inputs(x, y)
         self.classes_ = unique_labels(y)
-        self.X_ = x
-        self.y_ = y
 
         if len(self.cat_features) == 0 and self.cat_features_threshold > 0:
             for i in range(len(self.feature_names)):
@@ -129,7 +126,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                     max_bins=self.max_bins,
                     diff_woe_threshold=self.diff_woe_threshold,
                 )
-                self.WOE_IV_dict.append(
+                self.woe_iv_dict.append(
                     {
                         feature: res_dict,
                         "missing_bin": missing_position,
@@ -149,7 +146,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 max_bins=self.max_bins,
                 diff_woe_threshold=self.diff_woe_threshold,
             )
-            self.WOE_IV_dict.append(
+            self.woe_iv_dict.append(
                 {
                     feature: res_dict,
                     "missing_bin": missing_position,
@@ -163,11 +160,11 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         :param x: x data array
         :return: transformed data
         """
-        for i, _ in enumerate(self.WOE_IV_dict):
-            feature = list(self.WOE_IV_dict[i])[0]
+        for i, _ in enumerate(self.woe_iv_dict):
+            feature = list(self.woe_iv_dict[i])[0]
             self._print(f"Transform {feature} feature")
             new_feature = self.prefix + feature
-            for bin_values in self.WOE_IV_dict[i][feature]:
+            for bin_values in self.woe_iv_dict[i][feature]:
                 if feature in self.cat_features:
                     x.loc[
                         np.isin(x[feature], bin_values["bin"]), new_feature
@@ -180,25 +177,25 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                         ),
                         new_feature,
                     ] = bin_values["woe"]
-            if self.WOE_IV_dict[i]["missing_bin"] == "first":
+            if self.woe_iv_dict[i]["missing_bin"] == "first":
                 x[new_feature].fillna(
-                    self.WOE_IV_dict[i][feature][0]["woe"], inplace=True
+                    self.woe_iv_dict[i][feature][0]["woe"], inplace=True
                 )
-            elif self.WOE_IV_dict[i]["missing_bin"] == "last":
+            elif self.woe_iv_dict[i]["missing_bin"] == "last":
                 x[new_feature].fillna(
-                    self.WOE_IV_dict[i][feature][-1]["woe"], inplace=True
+                    self.woe_iv_dict[i][feature][-1]["woe"], inplace=True
                 )
             else:
                 if (
-                        self.WOE_IV_dict[i][feature][0]["woe"]
-                        < self.WOE_IV_dict[i][feature][-1]["woe"]
+                        self.woe_iv_dict[i][feature][0]["woe"]
+                        < self.woe_iv_dict[i][feature][-1]["woe"]
                 ):
                     x[new_feature].fillna(
-                        self.WOE_IV_dict[i][feature][0]["woe"], inplace=True
+                        self.woe_iv_dict[i][feature][0]["woe"], inplace=True
                     )
                 else:
                     x[new_feature].fillna(
-                        self.WOE_IV_dict[i][feature][-1]["woe"], inplace=True
+                        self.woe_iv_dict[i][feature][-1]["woe"], inplace=True
                     )
             if not self.safe_original_data:
                 del x[feature]
@@ -207,11 +204,11 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 
     def save(self, path: str) -> None:
         with open(path, "w") as file:
-            json.dump(self.WOE_IV_dict, file, indent=4, cls=NpEncoder)
+            json.dump(self.woe_iv_dict, file, indent=4, cls=NpEncoder)
 
     def load(self, path: str) -> None:
         with open(path, "r") as file:
-            self.WOE_IV_dict = json.load(file)
+            self.woe_iv_dict = json.load(file)
 
     def refit(self, x: pd.DataFrame, y: Union[pd.Series, np.ndarray]) -> None:
         if isinstance(x, pd.DataFrame):
@@ -226,32 +223,32 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 
         x, y = _check_inputs(x, y)
 
-        self.temp_WOE_IV_dict = []
+        temp_woe_iv_dict = []
 
-        for i in range(len(self.WOE_IV_dict)):
+        for i in range(len(self.woe_iv_dict)):
             feature_idx = list(self.feature_names).index(
-                list(self.WOE_IV_dict[i].keys())[0]
+                list(self.woe_iv_dict[i].keys())[0]
             )
-            self._print(f"Refiting {list(self.WOE_IV_dict[i].keys())[0]} feature")
+            self._print(f"Refiting {list(self.woe_iv_dict[i].keys())[0]} feature")
             res_dict = refit_woe_dict(
                 x=x[:, feature_idx],
                 y=y,
                 bins=[
                     _bin["bin"]
-                    for _bin in self.WOE_IV_dict[i][list(self.WOE_IV_dict[i].keys())[0]]
+                    for _bin in self.woe_iv_dict[i][list(self.woe_iv_dict[i].keys())[0]]
                 ],
-                type_feature=self.WOE_IV_dict[i]["type_feature"],
-                missing_bin=self.WOE_IV_dict[i]["missing_bin"]
+                type_feature=self.woe_iv_dict[i]["type_feature"],
+                missing_bin=self.woe_iv_dict[i]["missing_bin"]
             )
-            self.temp_WOE_IV_dict.append(
+            temp_woe_iv_dict.append(
                 {
-                    list(self.WOE_IV_dict[i].keys())[0]: res_dict,
-                    "missing_bin": self.WOE_IV_dict[i]["missing_bin"],
-                    "type_feature": self.WOE_IV_dict[i]["type_feature"],
+                    list(self.woe_iv_dict[i].keys())[0]: res_dict,
+                    "missing_bin": self.woe_iv_dict[i]["missing_bin"],
+                    "type_feature": self.woe_iv_dict[i]["type_feature"],
                 }
             )
-        self.WOE_IV_dict = self.temp_WOE_IV_dict
-        del self.temp_WOE_IV_dict
+        self.woe_iv_dict = temp_woe_iv_dict
+        del temp_woe_iv_dict
 
     def _print(self, msg: str):
         if self.verbose:
@@ -329,10 +326,9 @@ class CreateModel(BaseEstimator, TransformerMixin):
 
     def fit(self, x: pd.DataFrame, y: Union[pd.Series, np.ndarray]):
         if isinstance(x, pd.DataFrame):
-            if self.special_cols:
-                x = x.drop(self.special_cols + self.unused_cols, axis=1)
-            else:
-                x = x.drop(self.unused_cols, axis=1)
+            x = x.drop(self.special_cols + self.unused_cols, axis=1)
+            # else:
+            #     x = x.drop(self.unused_cols, axis=1)
             self.feature_names = x.columns
         elif isinstance(x, np.ndarray):
             self.feature_names = [f"X_{i}" for i in range(x.shape[-1])]
