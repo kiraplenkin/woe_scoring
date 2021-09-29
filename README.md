@@ -55,6 +55,7 @@ model.fit(enc_train, train["Survived"])
 test_proba = model.predict_proba(enc_test)[:, 1]
 ```
 3. Use CreateModel:
+
 ```python
 import pandas as pd
 from woe_scoring import CreateModel
@@ -83,5 +84,5 @@ model = CreateModel(
     save_report=False
 )
 model.fit(train, train["Survived"])
-test_proba = model.predict_proba(test[model.feature_names])[:, 1]
+test_proba = model.predict_proba(test[model.feature_names_])[:, 1]
 ```
