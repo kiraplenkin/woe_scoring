@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "woe_scoring"
+version = "0.3.1"
+description = "Weight Of Evidence Transformer and LogisticRegression model with scikit-learn API"
+authors = ["Stroganov Kirill <kiraplenkin@gmail.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+numpy = ">=1.19.5"
+pandas = ">=1.2.2"
+scipy = ">=1.6.1"
+scikit-learn = ">=0.24.1"
+statsmodels = ">=0.12.2"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -6,5 +6,6 @@ notebook/
 venv/
 .idea/
 core/.mypy_cache/
-
+/dist
+poetry.lock
 test.py
