@@ -28,7 +28,7 @@ def _mono_flags(bad_rates: List[Dict]) -> bool:
     bad_rate_diffs = np.diff([bad_rate["bad_rate"] for bad_rate in bad_rates])
     positive_mono_diff = np.all(bad_rate_diffs > 0)
     negative_mono_diff = np.all(bad_rate_diffs < 0)
-    return bool(positive_mono_diff | negative_mono_diff)
+    return True in [positive_mono_diff, negative_mono_diff]
 
 
 def _find_index_of_diff_flag(bad_rates: List[Dict]) -> int:
@@ -336,6 +336,12 @@ def num_binning(
     if len(bad_rates) == 2:
         return bad_rates, missing_bin
 
+    while (_mono_flags(bad_rates) is True) and (len(bad_rates) > 2):
+        bad_rates, bins = _merge_bins_chi(x, y, bad_rates, bins)
+
+    if len(bad_rates) == 2:
+        return bad_rates, missing_bin
+
     while (min([bad_rate["pct"] for bad_rate in bad_rates]) <= min_pct_group) and (
             len(bad_rates) > 2
     ):
@@ -350,12 +356,6 @@ def num_binning(
         idx = _check_diff_woe(bad_rates, diff_woe_threshold) + 1
         del bins[idx]
         bad_rates, _ = bin_bad_rate(x, y, bins)
-
-    if len(bad_rates) == 2:
-        return bad_rates, missing_bin
-
-    while (~_mono_flags(bad_rates)) and (len(bad_rates) > 2):
-        bad_rates, bins = _merge_bins_chi(x, y, bad_rates, bins)
 
     return bad_rates, missing_bin
 
