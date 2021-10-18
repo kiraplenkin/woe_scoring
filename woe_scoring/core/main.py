@@ -446,11 +446,13 @@ class CreateModel(BaseEstimator, TransformerMixin):
 
         #  check features for pvalue threshold
         retrain = False
+        to_drop = []
         for i, pvalue in enumerate(self.model.wald_test_terms().table["pvalue"]):
             if pvalue > 0.05:
-                self.feature_names_.remove(self.model.wald_test_terms().table.index[i])
+                to_drop.append(self.model.wald_test_terms().table.index[i])
                 retrain = True
         if retrain:
+            self.feature_names_ = [feature for feature in self.feature_names_ if feature not in to_drop]
             self.model = sm.Logit(y, sm.add_constant(x[self.feature_names_])).fit()
 
         self.results = pd.read_html(self.model.summary().tables[1].as_html(), header=0, index_col=0)[0].reset_index()
