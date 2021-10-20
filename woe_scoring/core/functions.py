@@ -249,18 +249,20 @@ def cat_binning(
             bad_rates, _ = bin_bad_rate(x, y, bins, cat=True)
             bins = [bad_rate["bin"] for bad_rate in bad_rates]
 
-    if len(bins) == 2:
+    if len(bins) <= 2:
         return bad_rates, missing_bin
 
-    idx = _check_diff_woe(bad_rates, diff_woe_threshold)
-    while idx is not None and len(bins) > 2:
+    while (_check_diff_woe(bad_rates, diff_woe_threshold) is not None) and (
+            len(bad_rates) > 2
+    ):
+        idx = _check_diff_woe(bad_rates, diff_woe_threshold)
         bins[idx + 1] += bins[idx]
         del bins[idx]
         bad_rates, _ = bin_bad_rate(x, y, bins, cat=True)
         bins = [bad_rate["bin"] for bad_rate in bad_rates]
         idx = _check_diff_woe(bad_rates, diff_woe_threshold)
 
-    if len(bins) == 2:
+    if len(bins) <= 2:
         return bad_rates, missing_bin
 
     while (
@@ -333,13 +335,13 @@ def num_binning(
             missing_bin = "last"
         bad_rates, _ = bin_bad_rate(x, y, bins)
 
-    if len(bad_rates) == 2:
+    if len(bad_rates) <= 2:
         return bad_rates, missing_bin
 
     while (_mono_flags(bad_rates) is True) and (len(bad_rates) > 2):
         bad_rates, bins = _merge_bins_chi(x, y, bad_rates, bins)
 
-    if len(bad_rates) == 2:
+    if len(bad_rates) <= 2:
         return bad_rates, missing_bin
 
     while (min([bad_rate["pct"] for bad_rate in bad_rates]) <= min_pct_group) and (
@@ -347,7 +349,7 @@ def num_binning(
     ):
         bad_rates, bins = _merge_bins_min_pct(x, y, bad_rates, bins)
 
-    if len(bad_rates) == 2:
+    if len(bad_rates) <= 2:
         return bad_rates, missing_bin
 
     while (_check_diff_woe(bad_rates, diff_woe_threshold) is not None) and (
