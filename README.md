@@ -47,8 +47,8 @@ encoder = WOETransformer(
 encoder.fit(train, train["Survived"])
 encoder.save("train_dict.json")
 
-enc_train = encoder.transform(train.drop(special_cols, axis=1))
-enc_test = encoder.transform(test.drop(special_cols, axis=1))
+enc_train = encoder.transform(train)
+enc_test = encoder.transform(test)
 
 model = LogisticRegression()
 model.fit(enc_train, train["Survived"])
