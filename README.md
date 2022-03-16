@@ -75,14 +75,14 @@ special_cols = [
 ]
 
 model = CreateModel(
-    max_vars=5,
+    max_vars=0.8,
     special_cols=special_cols,
     n_jobs=-1,
     random_state=42,
     class_weight='balanced',
     cv=3,
-    save_report=False
 )
 model.fit(train, train["Survived"])
+model.save_reports("/")
 test_proba = model.predict_proba(test[model.feature_names_])
 ```
