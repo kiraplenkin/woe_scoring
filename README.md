@@ -39,7 +39,7 @@ cat_cols = [
 
 encoder = WOETransformer(
     max_bins=8,
-    min_pcnt_group=0.1,
+    min_pct_group=0.1,
     cat_features=cat_cols,
     special_cols=special_cols
 )
