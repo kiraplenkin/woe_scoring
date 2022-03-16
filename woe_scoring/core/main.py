@@ -180,18 +180,17 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 x[new_feature].fillna(
                     self.woe_iv_dict[i][feature][-1]["woe"], inplace=True
                 )
+            elif (
+                    self.woe_iv_dict[i][feature][0]["woe"]
+                    < self.woe_iv_dict[i][feature][-1]["woe"]
+            ):
+                x[new_feature].fillna(
+                    self.woe_iv_dict[i][feature][0]["woe"], inplace=True
+                )
             else:
-                if (
-                        self.woe_iv_dict[i][feature][0]["woe"]
-                        < self.woe_iv_dict[i][feature][-1]["woe"]
-                ):
-                    x[new_feature].fillna(
-                        self.woe_iv_dict[i][feature][0]["woe"], inplace=True
-                    )
-                else:
-                    x[new_feature].fillna(
-                        self.woe_iv_dict[i][feature][-1]["woe"], inplace=True
-                    )
+                x[new_feature].fillna(
+                    self.woe_iv_dict[i][feature][-1]["woe"], inplace=True
+                )
             if not self.safe_original_data:
                 del x[feature]
 
