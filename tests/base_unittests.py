@@ -1,7 +1,7 @@
 import unittest
 from typing import Dict, List
 
-from woe_scoring.core.functions import _check_diff_woe, _chi2, _find_index_of_diff_flag, _mono_flags
+from woe_scoring.core.binning.functions import _check_diff_woe, _chi2, _find_index_of_diff_flag, _mono_flags
 
 
 class BaseTests(unittest.TestCase):
@@ -32,37 +32,27 @@ class BaseTests(unittest.TestCase):
                 "woe": -1
             }
         ]
-        bad: int = sum([bad_rate["bad"] for bad_rate in self.test_input_dicts])
-        total: int = sum([bad_rate["total"] for bad_rate in self.test_input_dicts])
+        bad: int = sum(bad_rate["bad"] for bad_rate in self.test_input_dicts)
+        total: int = sum(bad_rate["total"] for bad_rate in self.test_input_dicts)
         self.overall_rate: float = bad / total
         self.diff_woe_threshold: float = 0.1
 
-        self.bad_input_dicts: List[Dict] = [
-            {
+        self.bad_input_dicts: List[Dict] = [{
                 "bad": 3,
                 "total": 4,
                 "bad_rate": 3 / 4,
                 "woe": 1.1
-            },
-            {
+            }, {
                 "bad": 2,
                 "total": 4,
                 "bad_rate": 2 / 4,
                 "woe": 1.12
-            },
-            {
+            }, {
                 "bad": 3,
                 "total": 4,
                 "bad_rate": 3 / 4,
                 "woe": -1
-            },
-            {
-                "bad": 4,
-                "total": 4,
-                "bad_rate": 4 / 4,
-                "woe": -3
-            }
-        ]
+            }, {"bad": 4, "total": 4, "bad_rate": 1, "woe": -3}]
 
     def test__chi2(self):
         self.assertEqual(3.3333333333333335, _chi2(self.test_input_dicts, self.overall_rate))
