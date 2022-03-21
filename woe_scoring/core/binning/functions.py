@@ -122,12 +122,11 @@ def _bin_bad_rate(
         pct = np.sum(np.isin(x_not_na, x_in)) * 1.0 / len(x)
         bad_rate = bad / total
         good = total - bad
-        good_rate = good / total
         if good != 0 and bad != 0:
             woe = np.log((good / all_good) / (bad / all_bad))
         else:
             woe = np.log((good + 0.5 / all_good) / (bad + 0.5 / all_bad))
-        iv = (good_rate - bad_rate) * woe
+        iv = ((good / all_good) - (bad / all_bad)) * woe
         stats = {
             "bin": value,
             "total": total,
