@@ -97,6 +97,8 @@ def _bin_bad_rate(
         x: np.ndarray, y: np.ndarray, bins: List, cat: bool = False
 ):
     bad_rates = []
+    all_bad = y.sum()
+    all_good = len(y) - all_bad
     if cat:
         max_idx = len(bins)
     else:
@@ -116,8 +118,6 @@ def _bin_bad_rate(
                 np.where((x_not_na >= np.min(value)) & (x_not_na < np.max(value)))
             ]
         total = len(x_in)
-        all_bad = y[~pd.isna(x)].sum()
-        all_good = len(y[~pd.isna(x)]) - all_bad
         bad = y_not_na[np.isin(x_not_na, x_in)].sum()
         pct = np.sum(np.isin(x_not_na, x_in)) * 1.0 / len(x)
         bad_rate = bad / total
