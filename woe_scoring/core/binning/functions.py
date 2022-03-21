@@ -151,7 +151,11 @@ def _bin_bad_rate(
     return bad_rates, overall_rate
 
 
-def cat_binning(x, y: np.ndarray, min_pct_group: float, max_bins: int, diff_woe_threshold: float):
+def _calc_max_bins(bins: List[Union[int, float, str]], max_bins: float) -> int:
+    return int(len(bins) * max_bins)
+
+
+def cat_binning(x, y: np.ndarray, min_pct_group: float, max_bins: Union[int, float], diff_woe_threshold: float):
     missing_bin = None
 
     try:
@@ -162,6 +166,9 @@ def cat_binning(x, y: np.ndarray, min_pct_group: float, max_bins: int, diff_woe_
         data_type = "object"
 
     bins = list([bin] for bin in np.unique(x[~pd.isna(x)]))
+
+    if max_bins < 1:
+        max_bins = _calc_max_bins(bins, max_bins)
 
     if len(bins) > max_bins:
         bad_rates_dict = dict(
@@ -268,8 +275,12 @@ def cat_binning(x, y: np.ndarray, min_pct_group: float, max_bins: int, diff_woe_
     return bad_rates, missing_bin
 
 
-def num_binning(x, y: np.ndarray, min_pct_group: float, max_bins: int, diff_woe_threshold: float):
+def num_binning(x, y: np.ndarray, min_pct_group: float, max_bins: Union[int, float], diff_woe_threshold: float):
     missing_bin = None
+
+    if max_bins < 1:
+        max_bins = _calc_max_bins(list(np.unique(x[~pd.isna(x)])), max_bins)
+
     bins = [np.NINF]
     if len(np.unique(x[~pd.isna(x)])) > max_bins:
         for quantile in range(1, max_bins):

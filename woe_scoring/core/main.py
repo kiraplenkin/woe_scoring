@@ -49,7 +49,7 @@ def _check_inputs(
 class WOETransformer(BaseEstimator, TransformerMixin):
     def __init__(
             self,
-            max_bins: int = 10,
+            max_bins: Union[int, float] = 0.8,
             min_pct_group: float = 0.05,
             verbose: bool = False,
             prefix: str = "WOE_",
@@ -65,6 +65,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 
         TODO: add n_jobs
         """
+        self.classes_ = None
         self.max_bins = max_bins
         self.min_pct_group = min_pct_group
         self.cat_features = cat_features or []
