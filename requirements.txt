@@ -4,3 +4,4 @@ scipy>=1.6.1
 scikit-learn>=0.24.1
 statsmodels>=0.12.2
 lxml>=4.8.0
+joblib>=1.1.0

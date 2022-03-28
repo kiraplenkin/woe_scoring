@@ -137,12 +137,12 @@ def _bin_bad_rate(
         total = len(x_in)
         bad = y_not_na[np.isin(x_not_na, x_in)].sum()
         pct = np.sum(np.isin(x_not_na, x_in)) * 1.0 / len(x)
-        bad_rate = bad / total
+        bad_rate = bad / total if total != 0 else 0
         good = total - bad
         if good != 0 and bad != 0:
             woe = np.log((good / all_good) / (bad / all_bad))
         else:
-            woe = np.log((good + 0.5 / all_good) / (bad + 0.5 / all_bad))
+            woe = np.log((good + 0.05 / all_good) / (bad + 0.05 / all_bad))
         iv = ((good / all_good) - (bad / all_bad)) * woe
         bad_rates.append(
             {
@@ -173,7 +173,7 @@ def _calc_max_bins(bins, max_bins: float) -> int:
     return max(int(len(bins) * max_bins), 2)
 
 
-def cat_binning(
+def _cat_binning(
         x, y: np.ndarray,
         min_pct_group: float,
         max_bins: Union[int, float],
@@ -297,7 +297,28 @@ def cat_binning(
     return bad_rates, missing_bin
 
 
-def num_binning(
+def cat_processing(
+        x: pd.Series,
+        y: Union[np.ndarray, pd.Series],
+        min_pct_group: float,
+        max_bins: Union[int, float],
+        diff_woe_threshold: float,
+) -> Dict:
+    res_dict, missing_position = _cat_binning(
+        x=x.values,
+        y=y,
+        min_pct_group=min_pct_group,
+        max_bins=max_bins,
+        diff_woe_threshold=diff_woe_threshold,
+    )
+    return {
+        x.name: res_dict,
+        "missing_bin": missing_position,
+        "type_feature": "cat",
+    }
+
+
+def _num_binning(
         x, y: np.ndarray,
         min_pct_group: float,
         max_bins: Union[int, float],
@@ -389,6 +410,29 @@ def num_binning(
         bad_rates, _ = _bin_bad_rate(x, y, bins)
 
     return bad_rates, missing_bin
+
+
+def num_processing(
+        x: pd.Series,
+        y: Union[np.ndarray, pd.Series],
+        min_pct_group: float,
+        max_bins: Union[int, float],
+        diff_woe_threshold: float,
+        merge_type: str,
+) -> Dict:
+    res_dict, missing_position = _num_binning(
+        x=x.values,
+        y=y,
+        min_pct_group=min_pct_group,
+        max_bins=max_bins,
+        diff_woe_threshold=diff_woe_threshold,
+        merge_type=merge_type,
+    )
+    return {
+        x.name: res_dict,
+        "missing_bin": missing_position,
+        "type_feature": "num",
+    }
 
 
 def refit_woe_dict(x: np.ndarray, y: np.ndarray, bins: List, type_feature: str, missing_bin: str) -> List[Dict]:
