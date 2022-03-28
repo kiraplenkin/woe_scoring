@@ -21,7 +21,7 @@ setup(
     author=MAINTAINER,
     author_email=MAINTAINER_EMAIL,
     url=URL,
-    download_url="https://github.com/kiraplenkin/woe_scoring/archive/refs/tags/v0.2.2.tar.gz",
+    download_url="https://github.com/kiraplenkin/woe_scoring/archive/refs/tags/v0.4.0.tar.gz",
     license='',
     packages=find_packages(),
     include_package_data=True,
@@ -32,6 +32,6 @@ setup(
         "Scorecard",
         "LogisticRegression"
     ],
-    install_requires=["numpy", "pandas", "scikit-learn", "statsmodels", "scipy"],
+    install_requires=["numpy", "pandas", "scikit-learn", "statsmodels", "scipy", "lxml"],
     zip_safe=False
 )
