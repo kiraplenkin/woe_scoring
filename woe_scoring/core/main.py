@@ -3,11 +3,11 @@ from typing import List, Tuple, Union
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.multiclass import type_of_target, unique_labels
-from sklearn.utils.validation import check_X_y
 
-from .binning.functions import cat_binning, num_binning, refit_woe_dict
+from .binning.functions import cat_processing, num_processing, refit_woe_dict
 from .model.functions import create_model, feature_select, generate_sql, predict_proba, save_reports
 
 
@@ -51,7 +51,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             self,
             max_bins: Union[int, float] = 10,
             min_pct_group: float = 0.05,
-            verbose: bool = False,
+            n_jobs: int = 1,
             prefix: str = "WOE_",
             merge_type: str = "chi2",
             cat_features: List = None,
@@ -62,9 +62,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
     ):
         """
         Performs the Weight Of Evidence transformation over the input x features using information from y vector.
-        :param verbose: boolean flag to add verbose output
-
-        TODO: add n_jobs
         """
         self.classes_ = None
         self.max_bins = max_bins
@@ -73,7 +70,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         self.special_cols = special_cols or []
         self.cat_features_threshold = cat_features_threshold
         self.diff_woe_threshold = diff_woe_threshold
-        self.verbose = verbose
+        self.n_jobs = n_jobs
         self.prefix = prefix
         self.safe_original_data = safe_original_data
         self.merge_type = merge_type
@@ -97,7 +94,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         else:
             raise TypeError("x vector is not np array neither data frame")
 
-        x, y = _check_inputs(x, y)
         self.classes_ = unique_labels(y)
 
         if len(self.cat_features) == 0 and self.cat_features_threshold > 0:
@@ -114,44 +110,30 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 for feature in self.feature_names
                 if feature not in self.cat_features
             ]
-            for feature in self.cat_features:
-                feature_idx = list(self.feature_names).index(feature)
-                self._print(f"Exploring {feature} feature")
-                res_dict, missing_position = cat_binning(
-                    x=x[:, feature_idx],
-                    y=y,
-                    min_pct_group=self.min_pct_group,
-                    max_bins=self.max_bins,
-                    diff_woe_threshold=self.diff_woe_threshold,
-                )
-                self.woe_iv_dict.append(
-                    {
-                        feature: res_dict,
-                        "missing_bin": missing_position,
-                        "type_feature": "cat",
-                    }
-                )
+            self.woe_iv_dict = Parallel(n_jobs=self.n_jobs)(
+                delayed(cat_processing)(
+                    x[col],
+                    y,
+                    self.min_pct_group,
+                    self.max_bins,
+                    self.diff_woe_threshold
+                ) for col in self.cat_features
+            )
         else:
             self.num_features = self.feature_names
 
-        for feature in self.num_features:
-            feature_idx = list(self.feature_names).index(feature)
-            self._print(f"Exploring {feature} feature")
-            res_dict, missing_position = num_binning(
-                x=x[:, feature_idx].astype(float),
-                y=y,
-                min_pct_group=self.min_pct_group,
-                max_bins=self.max_bins,
-                diff_woe_threshold=self.diff_woe_threshold,
-                merge_type=self.merge_type,
-            )
-            self.woe_iv_dict.append(
-                {
-                    feature: res_dict,
-                    "missing_bin": missing_position,
-                    "type_feature": "num",
-                }
-            )
+        num_features_res = Parallel(n_jobs=self.n_jobs)(
+            delayed(num_processing)(
+                x[col],
+                y,
+                self.min_pct_group,
+                self.max_bins,
+                self.diff_woe_threshold,
+                self.merge_type
+            ) for col in self.num_features
+        )
+
+        self.woe_iv_dict += num_features_res
 
     def transform(self, x: pd.DataFrame):
         """
@@ -161,7 +143,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         """
         for i, _ in enumerate(self.woe_iv_dict):
             feature = list(self.woe_iv_dict[i])[0]
-            self._print(f"Transform {feature} feature")
             new_feature = self.prefix + feature
             for bin_values in self.woe_iv_dict[i][feature]:
                 if feature in self.cat_features:
@@ -219,15 +200,12 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         else:
             raise TypeError("x vector is not np array neither data frame")
 
-        x, y = _check_inputs(x, y)
-
         temp_woe_iv_dict = []
 
         for i in range(len(self.woe_iv_dict)):
             feature_idx = list(self.feature_names).index(
                 list(self.woe_iv_dict[i].keys())[0]
             )
-            self._print(f"Refiting {list(self.woe_iv_dict[i].keys())[0]} feature")
             res_dict = refit_woe_dict(
                 x=x[:, feature_idx],
                 y=y,
@@ -247,10 +225,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             )
         self.woe_iv_dict = temp_woe_iv_dict
         del temp_woe_iv_dict
-
-    def _print(self, msg: str):
-        if self.verbose:
-            print(msg)
 
 
 class CreateModel(BaseEstimator, TransformerMixin):
