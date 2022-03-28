@@ -49,10 +49,11 @@ def _check_inputs(
 class WOETransformer(BaseEstimator, TransformerMixin):
     def __init__(
             self,
-            max_bins: Union[int, float] = 0.8,
+            max_bins: Union[int, float] = 10,
             min_pct_group: float = 0.05,
             verbose: bool = False,
             prefix: str = "WOE_",
+            merge_type: str = "chi2",
             cat_features: List = None,
             special_cols: List = None,
             cat_features_threshold: int = 0,
@@ -75,6 +76,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         self.verbose = verbose
         self.prefix = prefix
         self.safe_original_data = safe_original_data
+        self.merge_type = merge_type
 
         self.woe_iv_dict = []
         self.feature_names = []
@@ -141,6 +143,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 min_pct_group=self.min_pct_group,
                 max_bins=self.max_bins,
                 diff_woe_threshold=self.diff_woe_threshold,
+                merge_type=self.merge_type,
             )
             self.woe_iv_dict.append(
                 {
