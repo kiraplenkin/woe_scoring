@@ -185,7 +185,7 @@ def _cat_binning(
         x = x.astype(float)
         data_type = "float"
     except ValueError:
-        x = x.astype(object)
+        x = x.astype(str)
         data_type = "object"
 
     bins = [[_bin] for _bin in np.unique(x[~pd.isna(x)])]
@@ -442,7 +442,7 @@ def refit_woe_dict(x: np.ndarray, y: np.ndarray, bins: List, type_feature: str, 
             x = x.astype(float)
             x[pd.isna(x)] = -1
         except ValueError:
-            x = x.astype(object)
+            x = x.astype(str)
             x[pd.isna(x)] = "Missing"
     else:
         if missing_bin == "first":
