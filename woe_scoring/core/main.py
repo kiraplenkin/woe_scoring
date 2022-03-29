@@ -1,11 +1,11 @@
 import json
-from typing import List, Tuple, Union
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.utils.multiclass import type_of_target, unique_labels
+from sklearn.utils.multiclass import unique_labels
 
 from .binning.functions import cat_processing, num_processing, refit_woe_dict
 from .model.functions import create_model, feature_select, generate_sql, predict_proba, save_reports
@@ -21,29 +21,6 @@ class NpEncoder(json.JSONEncoder):
             return obj.tolist()
         else:
             return super(NpEncoder, self).default(obj)
-
-
-def _check_inputs(
-        x: Union[pd.DataFrame, np.ndarray], y: Union[pd.DataFrame, np.ndarray]
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Check input data
-    :param x: data matrix
-    :param y: target vector
-    :return: x, y
-    """
-    if type_of_target(y) != "binary":
-        raise ValueError("y vector should be binary")
-
-    x, y = check_X_y(
-        x,
-        y,
-        accept_sparse=False,
-        force_all_finite=False,
-        dtype=None,
-        y_numeric=True,
-    )
-    return x, y
 
 
 class WOETransformer(BaseEstimator, TransformerMixin):
