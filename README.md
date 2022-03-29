@@ -40,8 +40,11 @@ cat_cols = [
 encoder = WOETransformer(
     max_bins=8,
     min_pct_group=0.1,
+    diff_woe_threshold=0.1,
     cat_features=cat_cols,
-    special_cols=special_cols
+    special_cols=special_cols,
+    n_jobs=-1,
+    merge_type='chi2',
 )
 
 encoder.fit(train, train["Survived"])
