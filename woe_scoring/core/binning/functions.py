@@ -117,60 +117,75 @@ def _merge_bins_min_pct(
     return bad_rates, bins
 
 
+def _calc_stats(x, y: np.ndarray, idx, all_bad, all_good: int, bins: List, cat: bool = False) -> Dict:
+    value = bins[idx] if cat else [bins[idx], bins[idx + 1]]
+    x_not_na = x[~pd.isna(x)]
+    y_not_na = y[~pd.isna(x)]
+    if cat:
+        x_in = x_not_na[pd.Series(x_not_na).isin(value)]
+    else:
+        x_in = x_not_na[
+            np.where((x_not_na >= np.min(value)) & (x_not_na < np.max(value)))
+        ]
+    total = len(x_in)
+    bad = y_not_na[np.isin(x_not_na, x_in)].sum()
+    pct = np.sum(np.isin(x_not_na, x_in)) / len(x)
+    bad_rate = bad / total if total != 0 else 0
+    good = total - bad
+    woe = np.log((good / all_good) / (bad / all_bad)) if good != 0 and bad != 0 else np.log(
+        (good + 0.5 / all_good) / (bad + 0.5 / all_bad)
+    )
+    iv = ((good / all_good) - (bad / all_bad)) * woe
+    return {
+        "bin": value,
+        "total": total,
+        "bad": bad,
+        "pct": pct,
+        "bad_rate": bad_rate,
+        "woe": woe,
+        "iv": iv,
+    }
+
+
 def _bin_bad_rate(
         x: np.ndarray, y: np.ndarray, bins: List, cat: bool = False
 ):
-    bad_rates = []
     all_bad = y.sum()
     all_good = len(y) - all_bad
     max_idx = len(bins) if cat else len(bins) - 1
-    for i in range(max_idx):
-        value = bins[i] if cat else [bins[i], bins[i + 1]]
-        x_not_na = x[~pd.isna(x)]
-        y_not_na = y[~pd.isna(x)]
-        if cat:
-            x_in = x_not_na[pd.Series(x_not_na).isin(value)]
-        else:
-            x_in = x_not_na[
-                np.where((x_not_na >= np.min(value)) & (x_not_na < np.max(value)))
-            ]
-        total = len(x_in)
-        bad = y_not_na[np.isin(x_not_na, x_in)].sum()
-        pct = np.sum(np.isin(x_not_na, x_in)) * 1.0 / len(x)
-        bad_rate = bad / total if total != 0 else 0
-        good = total - bad
-        if good != 0 and bad != 0:
-            woe = np.log((good / all_good) / (bad / all_bad))
-        else:
-            woe = np.log((good + 0.05 / all_good) / (bad + 0.05 / all_bad))
-        iv = ((good / all_good) - (bad / all_bad)) * woe
-        bad_rates.append(
-            {
-                "bin": value,
-                "total": total,
-                "bad": bad,
-                "pct": pct,
-                "bad_rate": bad_rate,
-                "woe": woe,
-                "iv": iv,
-            }
-        )
-
+    bad_rates = [_calc_stats(x, y, idx, all_bad, all_good, bins, cat) for idx in range(max_idx)]
     if cat:
         bad_rates.sort(key=lambda _x: _x["bad_rate"])
-
     overall_rate = None
     if not cat:
         bad = sum(bad_rate["bad"] for bad_rate in bad_rates)
         total = sum(bad_rate["total"] for bad_rate in bad_rates)
-
-        overall_rate = bad * 1.0 / total
-
+        overall_rate = bad / total
     return bad_rates, overall_rate
 
 
 def _calc_max_bins(bins, max_bins: float) -> int:
     return max(int(len(bins) * max_bins), 2)
+
+
+def prepare_data(x: Union[pd.DataFrame, np.ndarray], special_cols: List[str] = None):
+    if not isinstance(x, pd.DataFrame):
+        raise TypeError("data should be pandas data frame")
+    if special_cols:
+        x = x.drop(special_cols, axis=1)
+    feature_names = x.columns
+    return x, feature_names
+
+
+def find_cat_features(x: pd.DataFrame, feature_names: List[str], cat_features_threshold: int) -> List[str]:
+    return [
+        feature_names[i] for i in range(len(feature_names)) if (
+                type(x[0, i]) == np.dtype("object")
+                or type(x[0, i]) == np.dtype("str")
+                or len(np.unique(x[:, i])) < cat_features_threshold
+        )
+
+    ]
 
 
 def _cat_binning(
@@ -435,7 +450,7 @@ def num_processing(
     }
 
 
-def refit_woe_dict(x: np.ndarray, y: np.ndarray, bins: List, type_feature: str, missing_bin: str) -> List[Dict]:
+def _refit_woe_dict(x, y: np.ndarray, bins: List, type_feature: str, missing_bin: str) -> List[Dict]:
     cat = type_feature == "cat"
     if cat:
         try:
@@ -444,12 +459,25 @@ def refit_woe_dict(x: np.ndarray, y: np.ndarray, bins: List, type_feature: str, 
         except ValueError:
             x = x.astype(str)
             x[pd.isna(x)] = "Missing"
-    else:
-        if missing_bin == "first":
-            x = np.nan_to_num(x, nan=np.amin(x[~pd.isna(x)]) - 1)
-        elif missing_bin == "last":
-            x = np.nan_to_num(x, nan=np.amax(x[~pd.isna(x)]) + 1)
-        bins = list({item for sublist in bins for item in sublist})
-
+    elif missing_bin == "first":
+        x = np.nan_to_num(x, nan=np.amin(x[~pd.isna(x)]) - 1)
+    elif missing_bin == "last":
+        x = np.nan_to_num(x, nan=np.amax(x[~pd.isna(x)]) + 1)
     bad_rates, _ = _bin_bad_rate(x, y, bins, cat=cat)
     return bad_rates
+
+
+def refit(
+        x, y: np.ndarray,
+        bins: List,
+        type_feature: str,
+        missing_bin: str
+) -> Dict:
+    res_dict = _refit_woe_dict(
+        x.values, y, bins, type_feature, missing_bin
+    )
+    return {
+        x.name: res_dict,
+        "missing_bin": missing_bin,
+        "type_feature": type_feature,
+    }

@@ -7,7 +7,7 @@ from joblib import Parallel, delayed
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.multiclass import unique_labels
 
-from .binning.functions import cat_processing, num_processing, refit_woe_dict
+from .binning.functions import cat_processing, find_cat_features, num_processing, prepare_data, refit
 from .model.functions import create_model, feature_select, generate_sql, predict_proba, save_reports
 
 
@@ -62,25 +62,15 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         :param x: data matrix
         :param y: target vector
         """
-        if isinstance(x, pd.DataFrame):
-            if self.special_cols:
-                x = x.drop(self.special_cols, axis=1)
-            self.feature_names = x.columns
-        elif isinstance(x, np.ndarray):
-            self.feature_names = [f"X_{i}" for i in range(x.shape[-1])]
-        else:
-            raise TypeError("x vector is not np array neither data frame")
-
+        x, self.feature_names = prepare_data(x=x, special_cols=self.special_cols)
         self.classes_ = unique_labels(y)
 
         if len(self.cat_features) == 0 and self.cat_features_threshold > 0:
-            for i in range(len(self.feature_names)):
-                if (
-                        type(x[0, i]) == np.dtype("object")
-                        or type(x[0, i]) == np.dtype("str")
-                        or len(np.unique(x[:, i])) < self.cat_features_threshold
-                ):
-                    self.cat_features.append(self.feature_names[i])
+            self.cat_features = find_cat_features(
+                x=x,
+                feature_names=self.feature_names,
+                cat_features_threshold=self.cat_features_threshold
+            )
         if len(self.cat_features) > 0:
             self.num_features = [
                 feature
@@ -167,41 +157,16 @@ class WOETransformer(BaseEstimator, TransformerMixin):
             self.woe_iv_dict = json.load(file)
 
     def refit(self, x: pd.DataFrame, y: Union[pd.Series, np.ndarray]) -> None:
-        if isinstance(x, pd.DataFrame):
-            if self.special_cols:
-                x = x.drop(self.special_cols, axis=1)
-            self.feature_names = x.columns
-            self.feature_names = [col.replace("WOE_", "") for col in self.feature_names]
-        elif isinstance(x, np.ndarray):
-            self.feature_names = [f"X_{i}" for i in range(x.shape[-1])]
-        else:
-            raise TypeError("x vector is not np array neither data frame")
-
-        temp_woe_iv_dict = []
-
-        for i in range(len(self.woe_iv_dict)):
-            feature_idx = list(self.feature_names).index(
-                list(self.woe_iv_dict[i].keys())[0]
-            )
-            res_dict = refit_woe_dict(
-                x=x[:, feature_idx],
-                y=y,
-                bins=[
-                    _bin["bin"]
-                    for _bin in self.woe_iv_dict[i][list(self.woe_iv_dict[i].keys())[0]]
-                ],
-                type_feature=self.woe_iv_dict[i]["type_feature"],
-                missing_bin=self.woe_iv_dict[i]["missing_bin"]
-            )
-            temp_woe_iv_dict.append(
-                {
-                    list(self.woe_iv_dict[i].keys())[0]: res_dict,
-                    "missing_bin": self.woe_iv_dict[i]["missing_bin"],
-                    "type_feature": self.woe_iv_dict[i]["type_feature"],
-                }
-            )
-        self.woe_iv_dict = temp_woe_iv_dict
-        del temp_woe_iv_dict
+        x, self.feature_names = prepare_data(x=x, special_cols=self.special_cols)
+        self.woe_iv_dict = Parallel(n_jobs=self.n_jobs)(
+            delayed(refit)(
+                x[list(self.woe_iv_dict[i].keys())[0]],
+                y.values,
+                [_bin["bin"] for _bin in self.woe_iv_dict[i][list(self.woe_iv_dict[i].keys())[0]]],
+                self.woe_iv_dict[i]["type_feature"],
+                self.woe_iv_dict[i]["missing_bin"]
+            ) for i in range(len(self.woe_iv_dict))
+        )
 
 
 class CreateModel(BaseEstimator, TransformerMixin):
