@@ -117,8 +117,13 @@ def _merge_bins_min_pct(
     return bad_rates, bins
 
 
-def _calc_stats(x, y: np.ndarray, idx, all_bad, all_good: int, bins: List, cat: bool = False) -> Dict:
-    value = bins[idx] if cat else [bins[idx], bins[idx + 1]]
+def _calc_stats(
+        x, y: np.ndarray, idx, all_bad, all_good: int, bins: List, cat: bool = False, refit_fl: bool = False
+) -> Dict:
+    if refit_fl:
+        value = bins[idx]
+    else:
+        value = bins[idx] if cat else [bins[idx], bins[idx + 1]]
     x_not_na = x[~pd.isna(x)]
     y_not_na = y[~pd.isna(x)]
     if cat:
@@ -148,12 +153,12 @@ def _calc_stats(x, y: np.ndarray, idx, all_bad, all_good: int, bins: List, cat: 
 
 
 def _bin_bad_rate(
-        x: np.ndarray, y: np.ndarray, bins: List, cat: bool = False
+        x: np.ndarray, y: np.ndarray, bins: List, cat: bool = False, refit_fl: bool = False
 ):
     all_bad = y.sum()
     all_good = len(y) - all_bad
     max_idx = len(bins) if cat else len(bins) - 1
-    bad_rates = [_calc_stats(x, y, idx, all_bad, all_good, bins, cat) for idx in range(max_idx)]
+    bad_rates = [_calc_stats(x, y, idx, all_bad, all_good, bins, cat, refit_fl) for idx in range(max_idx)]
     if cat:
         bad_rates.sort(key=lambda _x: _x["bad_rate"])
     overall_rate = None
@@ -463,7 +468,7 @@ def _refit_woe_dict(x, y: np.ndarray, bins: List, type_feature: str, missing_bin
         x = np.nan_to_num(x, nan=np.amin(x[~pd.isna(x)]) - 1)
     elif missing_bin == "last":
         x = np.nan_to_num(x, nan=np.amax(x[~pd.isna(x)]) + 1)
-    bad_rates, _ = _bin_bad_rate(x, y, bins, cat=cat)
+    bad_rates, _ = _bin_bad_rate(x, y, bins, cat=cat, refit_fl=True)
     return bad_rates
 
 
