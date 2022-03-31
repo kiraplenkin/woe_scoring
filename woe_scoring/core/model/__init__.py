@@ -1,1 +1,2 @@
-from .functions import create_model, feature_select, generate_sql, predict_proba, save_reports
+from .functions import create_model, generate_sql, iv_feature_select, predict_proba, save_reports, \
+    sequential_feature_select

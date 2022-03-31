@@ -8,7 +8,8 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.multiclass import unique_labels
 
 from .binning.functions import cat_processing, find_cat_features, num_processing, prepare_data, refit
-from .model.functions import create_model, feature_select, generate_sql, predict_proba, save_reports
+from .model.functions import create_model, generate_sql, iv_feature_select, predict_proba, save_reports, \
+    sequential_feature_select
 
 
 class NpEncoder(json.JSONEncoder):
@@ -172,11 +173,13 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 class CreateModel(BaseEstimator, TransformerMixin):
     def __init__(
             self,
-            max_vars: Union[int, float] = 0.8,
+            selection_method: str = 'iv',
+            max_vars: Union[int, float, None] = None,
             special_cols: List = None,
             unused_cols: List = None,
             n_jobs: int = None,
             gini_threshold: float = 5.0,
+            iv_threshold: float = 0.05,
             corr_threshold: float = 0.5,
             random_state: int = None,
             class_weight: str = None,
@@ -187,11 +190,13 @@ class CreateModel(BaseEstimator, TransformerMixin):
     ):
 
         self.results = None
+        self.selection_method = selection_method
         self.max_vars = max_vars
         self.special_cols = special_cols or []
         self.unused_cols = unused_cols or []
         self.n_jobs = n_jobs
         self.gini_threshold = gini_threshold
+        self.iv_threshold = iv_threshold
         self.corr_threshold = corr_threshold
         self.random_state = random_state
         self.class_weight = class_weight
@@ -206,31 +211,39 @@ class CreateModel(BaseEstimator, TransformerMixin):
         self.model = None
 
     def fit(self, x: pd.DataFrame, y: Union[pd.Series, np.ndarray]):
-        if isinstance(x, pd.DataFrame):
-            x = x.drop(self.special_cols + self.unused_cols, axis=1)
-            self.feature_names_ = x.columns
-        elif isinstance(x, np.ndarray):
-            self.feature_names_ = [f"X_{i}" for i in range(x.shape[-1])]
-        else:
-            raise TypeError("x vector is not np array neither data frame")
+        x, self.feature_names_ = prepare_data(x, special_cols=self.special_cols)
 
         if self.C is None:
             self.C = 1.0e4 / x.shape[0]
 
-        self.feature_names_ = feature_select(
-            x, y,
-            feature_names=self.feature_names_,
-            gini_threshold=self.gini_threshold,
-            corr_threshold=self.corr_threshold,
-            random_state=self.random_state,
-            class_weight=self.class_weight,
-            max_vars=self.max_vars,
-            direction=self.direction,
-            cv=self.cv,
-            c=self.C,
-            scoring=self.scoring,
-            n_jobs=self.n_jobs,
-        )
+        if self.max_vars is not None and self.max_vars < 1:
+            self.max_vars = int(len(self.feature_names_) * self.max_vars)
+
+        if self.selection_method == 'iv':
+            self.feature_names_ = iv_feature_select(
+                x, y,
+                feature_names=self.feature_names_,
+                iv_threshold=self.iv_threshold,
+                max_vars=self.max_vars,
+                n_jobs=self.n_jobs,
+            )
+        elif self.selection_method == 'sequential':
+            self.feature_names_ = sequential_feature_select(
+                x, y,
+                feature_names=self.feature_names_,
+                gini_threshold=self.gini_threshold,
+                corr_threshold=self.corr_threshold,
+                random_state=self.random_state,
+                class_weight=self.class_weight,
+                max_vars=self.max_vars,
+                direction=self.direction,
+                cv=self.cv,
+                c=self.C,
+                scoring=self.scoring,
+                n_jobs=self.n_jobs,
+            )
+        else:
+            raise NameError("selection_method should be 'iv' or 'sequential'")
 
         self.model = create_model(
             x, y,

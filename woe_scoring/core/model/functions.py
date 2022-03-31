@@ -1,9 +1,11 @@
 import os
-from typing import List, Union
+from operator import itemgetter
+from typing import Dict, List, Union
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from joblib import Parallel, delayed
 from sklearn.feature_selection import SequentialFeatureSelector
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
@@ -144,8 +146,8 @@ def _feature_selector(
     return list(np.array(feature_names)[list(sfs.get_support())])
 
 
-def feature_select(
-        x: [pd.DataFrame, np.ndarray],
+def sequential_feature_select(
+        x: [pd.DataFrame],
         y: Union[pd.Series, np.ndarray],
         feature_names: List[str],
         gini_threshold: float,
@@ -158,7 +160,7 @@ def feature_select(
         c: float,
         scoring: str,
         n_jobs: int,
-) -> list[str]:
+) -> List[str]:
     feature_names = _check_features_gini_threshold(
         x, y,
         feature_names=feature_names,
@@ -196,6 +198,35 @@ def feature_select(
         n_jobs=n_jobs
     )
     return feature_names
+
+
+def _calc_iv_dict(x: pd.DataFrame, y: np.ndarray, feature: str) -> Dict:
+    _iv = 0
+    for value in x[feature].sort_values().unique():
+        bad = y[x[feature] == value].sum()
+        good = len(y[x[feature] == value]) - bad
+        all_bad = y.sum()
+        all_good = len(y) - all_bad
+        _iv += ((good / all_good) - (bad / all_bad)) * value
+    return {feature: _iv}
+
+
+def iv_feature_select(
+        x: pd.DataFrame,
+        y: Union[pd.Series, np.ndarray],
+        feature_names: List[str],
+        iv_threshold: float,
+        max_vars: int,
+        n_jobs: int,
+) -> List[str]:
+    temp_res_dict = Parallel(n_jobs=n_jobs)(
+        delayed(_calc_iv_dict)(x, y, feature) for feature in feature_names
+    )
+    res_dict = {}
+    for d in temp_res_dict:
+        res_dict.update(d)
+    return [feature for feature in dict(sorted(res_dict.items(), key=itemgetter(1), reverse=True)) if
+            res_dict[feature] >= iv_threshold][:max_vars]
 
 
 def _check_pvalue(model: sm.Logit) -> List[int]:

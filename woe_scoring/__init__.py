@@ -1,3 +1,3 @@
 from woe_scoring.core import WOETransformer, CreateModel
 
-__version__ = "0.5.4"
+__version__ = "0.6.0"
