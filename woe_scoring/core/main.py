@@ -8,7 +8,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.multiclass import unique_labels
 
 from .binning.functions import cat_processing, find_cat_features, num_processing, prepare_data, refit
-from .model.functions import create_model, generate_sql, iv_feature_select, predict_proba, save_reports, save_scorecard, \
+from .model.functions import create_model, generate_sql, iv_feature_select, predict_proba, save_reports, save_scorecard_fn, \
     sequential_feature_select
 
 
@@ -277,7 +277,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
             odds: int = 10,
             points_to_double_odds: int = 69,
     ):
-        save_scorecard(
+        save_scorecard_fn(
             feature_names=self.feature_names_,
             encoder=encoder,
             model_results=self.model_results,

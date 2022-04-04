@@ -548,7 +548,7 @@ def _build_excel_sheet_with_charts(
         worksheet.insert_chart(f'{second_plot_position}{max_row + 3}', chart_score_ball)
 
 
-def save_scorecard(
+def save_scorecard_fn(
         feature_names: List[str],
         encoder,
         model_results,
