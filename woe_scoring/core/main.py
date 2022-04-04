@@ -109,6 +109,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         :param x: x data array
         :return: transformed data
         """
+        x = x.copy()
         for i, _ in enumerate(self.woe_iv_dict):
             feature = list(self.woe_iv_dict[i])[0]
             new_feature = self.prefix + feature
