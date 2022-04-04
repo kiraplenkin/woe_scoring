@@ -402,7 +402,7 @@ def _num_binning(
     if len(bad_rates) <= 2:
         return bad_rates, missing_bin
 
-    while (_mono_flags(bad_rates) is True) and (len(bad_rates) > 2):
+    while (_mono_flags(bad_rates) is False) and (len(bad_rates) > 2):
         if merge_type == 'chi2':
             bad_rates, bins = _merge_bins_chi(x, y, bad_rates, bins)
         elif merge_type == "iv":
