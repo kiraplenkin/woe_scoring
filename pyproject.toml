@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "woe_scoring"
-version = "0.7.3"
+version = "0.7.4"
 description = "Weight Of Evidence Transformer and LogisticRegression model with scikit-learn API"
 authors = ["Stroganov Kirill <kiraplenkin@gmail.com>"]
 license = "MIT"
