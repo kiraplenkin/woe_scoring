@@ -157,7 +157,7 @@ def _bin_bad_rate(
 ):
     all_bad = y.sum()
     all_good = len(y) - all_bad
-    max_idx = len(bins) if cat else len(bins) - 1
+    max_idx = len(bins) if cat or refit_fl else len(bins) - 1
     bad_rates = [_calc_stats(x, y, idx, all_bad, all_good, bins, cat, refit_fl) for idx in range(max_idx)]
     if cat:
         bad_rates.sort(key=lambda _x: _x["bad_rate"])
