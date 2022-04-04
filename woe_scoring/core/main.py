@@ -8,7 +8,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.multiclass import unique_labels
 
 from .binning.functions import cat_processing, find_cat_features, num_processing, prepare_data, refit
-from .model.functions import create_model, generate_sql, iv_feature_select, predict_proba, save_reports, \
+from .model.functions import create_model, generate_sql, iv_feature_select, predict_proba, save_reports, save_scorecard, \
     sequential_feature_select
 
 
@@ -177,7 +177,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
             max_vars: Union[int, float, None] = None,
             special_cols: List = None,
             unused_cols: List = None,
-            n_jobs: int = None,
+            n_jobs: int = 1,
             gini_threshold: float = 5.0,
             iv_threshold: float = 0.05,
             corr_threshold: float = 0.5,
@@ -189,7 +189,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
             scoring: str = "roc_auc",
     ):
 
-        self.results = None
+        self.model_results = None
         self.selection_method = selection_method
         self.max_vars = max_vars
         self.special_cols = special_cols or []
@@ -250,10 +250,10 @@ class CreateModel(BaseEstimator, TransformerMixin):
             feature_names=self.feature_names_
         )
 
-        self.results = pd.read_html(self.model.summary().tables[1].as_html(), header=0, index_col=0)[0].reset_index()
-        self.intercept_ = self.results.iloc[0, 1]
-        self.coef_ = list(self.results.iloc[1:, 1])
-        self.feature_names_ = list(self.results.iloc[1:, 0])
+        self.model_results = pd.read_html(self.model.summary().tables[1].as_html(), header=0, index_col=0)[0].reset_index()
+        self.intercept_ = self.model_results.iloc[0, 1]
+        self.coef_ = list(self.model_results.iloc[1:, 1])
+        self.feature_names_ = list(self.model_results.iloc[1:, 0])
 
     def save_reports(self, path: str):
         save_reports(self.model, path)
@@ -265,5 +265,23 @@ class CreateModel(BaseEstimator, TransformerMixin):
         return generate_sql(
             feature_names=self.feature_names_,
             encoder=encoder,
-            results=self.results
+            model_results=self.model_results
+        )
+
+    def save_scorecard(
+            self,
+            encoder,
+            path: str = '.',
+            base_scorecard_points: int = 444,
+            odds: int = 10,
+            points_to_double_odds: int = 69,
+    ):
+        save_scorecard(
+            feature_names=self.feature_names_,
+            encoder=encoder,
+            model_results=self.model_results,
+            base_scorecard_points=base_scorecard_points,
+            odds=odds,
+            points_to_double_odds=points_to_double_odds,
+            path=path
         )

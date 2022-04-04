@@ -278,7 +278,7 @@ def predict_proba(x: Union[pd.DataFrame, np.ndarray], model: sm.Logit):
 def generate_sql(
         feature_names: List[str],
         encoder,
-        results,
+        model_results,
 ) -> str:
     sql = [
         "with a as " + "(SELECT ",
@@ -337,13 +337,241 @@ def generate_sql(
             " FROM )",
             ", b as (",
             "SELECT a.*",
-            f", REPLACE(1 / (1 + EXP(-({results.iloc[0, 1]}",
+            f", REPLACE(1 / (1 + EXP(-({model_results.iloc[0, 1]}",
         )
     )
 
     sql.extend(
-        f" + ({results.iloc[idx, 1]} * a.{results.iloc[idx, 0]})"
-        for idx in range(1, results.shape[0])
+        f" + ({model_results.iloc[idx, 1]} * a.{model_results.iloc[idx, 0]})"
+        for idx in range(1, model_results.shape[0])
     )
     sql.extend(("))), ',', '.') as PD", " FROM a) ", "SELECT * FROM b"))
     return "".join(sql)
+
+
+def _calc_score_points(woe, coef, intercept, factor, offset: float, n_features: int) -> int:
+    b = offset - factor * intercept
+    s = -factor * coef * woe
+    return int(round(s + b / n_features))
+
+
+def _calc_stats_for_feature(
+        idx,
+        feature,
+        feature_names: List[str],
+        encoder,
+        model_results,
+        factor: float,
+        offset: float,
+) -> pd.DataFrame:
+    result_dict = {
+        "feature": [],
+        "coef": [],
+        "pvalue": [],
+        "bin": [],
+        "WOE": [],
+        "IV": [],
+        "percent_of_population": [],
+        "total": [],
+        "event_cnt": [],
+        "non_event_cnt": [],
+        "event_rate": [],
+        "score_ball": [],
+    }
+    if idx < 1:
+        result_dict["feature"].append(feature.replace("WOE_", ""))
+        result_dict["coef"].append(model_results.loc[idx, "coef"])
+        result_dict["pvalue"].append(model_results.loc[idx, "P>|z|"])
+        for key in result_dict:
+            if key not in ["feature", "coef", "pvalue"]:
+                result_dict[key].append("-")
+    else:
+        for i, _ in enumerate(encoder.woe_iv_dict):
+            if list(encoder.woe_iv_dict[i])[0] == feature.replace("WOE_", ""):
+                for _bin in encoder.woe_iv_dict[i][feature.replace("WOE_", "")]:
+                    result_dict["feature"].append(feature.replace("WOE_", ""))
+                    result_dict["coef"].append(model_results.loc[idx, "coef"])
+                    result_dict["pvalue"].append(model_results.loc[idx, "P>|z|"])
+                    result_dict["bin"].append(
+                        [val if val != -1 else str(val).replace("-1", "missing") for val in _bin["bin"]]
+                    )
+                    result_dict["WOE"].append(_bin["woe"])
+                    result_dict["IV"].append(_bin["iv"])
+                    result_dict["percent_of_population"].append(_bin["pct"])
+                    result_dict["total"].append(_bin["total"])
+                    result_dict["event_cnt"].append(_bin["bad"])
+                    result_dict["non_event_cnt"].append(result_dict["total"][-1] - result_dict["event_cnt"][-1])
+                    result_dict["event_rate"].append(_bin["bad_rate"])
+                    result_dict["score_ball"].append(
+                        _calc_score_points(
+                            woe=result_dict["WOE"][-1],
+                            coef=result_dict["coef"][-1],
+                            intercept=model_results.iloc[0, 1],
+                            factor=factor,
+                            offset=offset,
+                            n_features=len(feature_names),
+                        )
+                    )
+    return pd.DataFrame.from_dict(result_dict)
+
+
+def _calc_stats(
+        feature_names: List[str],
+        encoder,
+        model_results,
+        factor: float,
+        offset: float,
+) -> List[pd.DataFrame]:
+    feature_stats = []
+    for idx, feature in enumerate(model_results.iloc[:, 0]):
+        res_df = _calc_stats_for_feature(
+            idx,
+            feature,
+            feature_names,
+            encoder,
+            model_results,
+            factor,
+            offset
+        )
+        res_df.name = feature.replace("WOE_", "")
+        feature_stats.append(res_df)
+    return feature_stats
+
+
+def _build_excel_sheet_with_charts(
+        feature_stats: list[pd.DataFrame],
+        writer: pd.ExcelWriter,
+        width: int = 640,
+        height: int = 480,
+        first_plot_position: str = 'A',
+        second_plot_position: str = "J",
+):
+    # Get workbook link
+    workbook = writer.book
+    # Create merge format
+    merge_format = workbook.add_format(
+        {
+            'bold': 1,
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter'
+        }
+    )
+    iterator = [result for result in feature_stats if ((result is not None) and (result.name != 'const'))]
+    indexes = np.cumsum([len(result) for result in iterator])
+    full_features = pd.concat(tuple(iterator), ignore_index=True)
+    full_features.to_excel(writer, sheet_name='feature_statistics')
+    worksheet = writer.sheets['feature_statistics']
+    area_start = 1
+    for result, index in zip(iterator, indexes):
+        for column, column_width in zip([1, 2, 3], [20, 10, 10]):
+            worksheet.merge_range(area_start, column, index, column, result.iloc[0, column - 1], merge_format)
+            worksheet.set_column(column, column, column_width)
+        area_start = index + 1
+
+    for result in iterator:
+        # Get dimensions of result Excel sheet and column indexes
+        max_row = len(result)
+        event_cnt = result.columns.get_loc('event_cnt') + 1
+        non_event_cnt = result.columns.get_loc('non_event_cnt') + 1
+        score_ball = result.columns.get_loc('score_ball') + 1
+        woe = result.columns.get_loc('WOE') + 1
+        event_rate = result.columns.get_loc('event_rate') + 1
+        # Set sheet name, transfer data to sheet
+        sheet_name = result.name
+        result.to_excel(writer, sheet_name=sheet_name)
+        # Get worksheet link
+        worksheet = writer.sheets[sheet_name]
+        # Create stacked column chart
+        chart_events = workbook.add_chart({'type': 'column', 'subtype': 'stacked'})
+        # Add event and non-event counts to chart
+        chart_events.add_series(
+            {
+                'name': 'event_cnt ',
+                'values': [sheet_name, 1, event_cnt, max_row, event_cnt]
+            }
+        )
+        chart_events.add_series(
+            {
+                'name': 'non_event_cnt ',
+                'values': [sheet_name, 1, non_event_cnt, max_row, non_event_cnt]
+            }
+        )
+        # Create separate line chart for combination
+        woe_line = workbook.add_chart({'type': 'line'})
+        woe_line.add_series(
+            {
+                'name': 'WOE',
+                'values': [sheet_name, 1, woe, max_row, woe],
+                'smooth': True,
+                'y2_axis': True,
+            }
+        )
+        # Combine charts
+        chart_events.combine(woe_line)
+        # Create column chart for score_ball
+        chart_score_ball = workbook.add_chart({'type': 'column'})
+        chart_score_ball.add_series(
+            {
+                'name': 'score_ball ',
+                'values': [sheet_name, 1, score_ball, max_row, score_ball]
+            }
+        )
+        # Create separate line chart for combination
+        event_rate_line = workbook.add_chart({'type': 'line'})
+        event_rate_line.add_series(
+            {
+                'name': 'event_rate',
+                'values': [sheet_name, 1, event_rate, max_row, event_rate],
+                'smooth': True,
+                'y2_axis': True,
+            }
+        )
+        # Combine charts
+        chart_score_ball.combine(event_rate_line)
+        # Change size and legend of charts
+        chart_events.set_size({'width': width, 'height': height})
+        chart_events.set_legend({'position': 'bottom'})
+        chart_score_ball.set_size({'width': width, 'height': height})
+        chart_score_ball.set_legend({'position': 'bottom'})
+        # Merge first 3 columns
+        worksheet.merge_range(1, 1, max_row, 1, result.iloc[1, 0], merge_format)
+        worksheet.set_column(1, 1, 20)
+        worksheet.merge_range(1, 2, max_row, 2, result.iloc[1, 1], merge_format)
+        worksheet.set_column(2, 2, 10)
+        worksheet.merge_range(1, 3, max_row, 3, result.iloc[1, 2], merge_format)
+        worksheet.set_column(3, 3, 10)
+        # Insert charts
+        worksheet.insert_chart(f'{first_plot_position}{max_row + 3}', chart_events)
+        worksheet.insert_chart(f'{second_plot_position}{max_row + 3}', chart_score_ball)
+
+
+def save_scorecard(
+        feature_names: List[str],
+        encoder,
+        model_results,
+        base_scorecard_points: int,
+        odds: int,
+        points_to_double_odds: int,
+        path: str,
+) -> None:
+    factor = points_to_double_odds / np.log(2)
+    offset = base_scorecard_points - factor * np.log(odds)
+
+    feature_stats = _calc_stats(
+        feature_names=feature_names,
+        encoder=encoder,
+        model_results=model_results,
+        factor=factor,
+        offset=offset
+    )
+
+    try:
+        writer = pd.ExcelWriter(os.path.join(path, "Scorecard.xlsx"), engine="xlsxwriter")
+        _build_excel_sheet_with_charts(
+            feature_stats=feature_stats,
+            writer=writer
+        )
+        writer.save()
+    except Exception as e:
+        print(f"Problem with saving: {e}")
