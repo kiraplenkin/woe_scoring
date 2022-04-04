@@ -457,13 +457,15 @@ def _build_excel_sheet_with_charts(
             'valign': 'vcenter'
         }
     )
+    const = [result for result in feature_stats if result.name == 'const']
     iterator = [result for result in feature_stats if ((result is not None) and (result.name != 'const'))]
-    indexes = np.cumsum([len(result) for result in iterator])
-    full_features = pd.concat(tuple(iterator), ignore_index=True)
-    full_features.to_excel(writer, sheet_name='feature_statistics')
-    worksheet = writer.sheets['feature_statistics']
+    scorecard_iterator = [*const, *iterator]
+    indexes = np.cumsum([len(result) for result in scorecard_iterator])
+    full_features = pd.concat(tuple(scorecard_iterator), ignore_index=True)
+    full_features.to_excel(writer, sheet_name='Scorecard')
+    worksheet = writer.sheets['Scorecard']
     area_start = 1
-    for result, index in zip(iterator, indexes):
+    for result, index in zip(scorecard_iterator, indexes):
         for column, column_width in zip([1, 2, 3], [20, 10, 10]):
             worksheet.merge_range(area_start, column, index, column, result.iloc[0, column - 1], merge_format)
             worksheet.set_column(column, column, column_width)
@@ -503,7 +505,7 @@ def _build_excel_sheet_with_charts(
             {
                 'name': 'WOE',
                 'values': [sheet_name, 1, woe, max_row, woe],
-                'smooth': True,
+                'smooth': False,
                 'y2_axis': True,
             }
         )
@@ -523,7 +525,7 @@ def _build_excel_sheet_with_charts(
             {
                 'name': 'event_rate',
                 'values': [sheet_name, 1, event_rate, max_row, event_rate],
-                'smooth': True,
+                'smooth': False,
                 'y2_axis': True,
             }
         )
