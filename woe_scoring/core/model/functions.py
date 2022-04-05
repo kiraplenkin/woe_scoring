@@ -218,6 +218,12 @@ def iv_feature_select(
         iv_threshold: float,
         max_vars: int,
         n_jobs: int,
+        corr_threshold: float,
+        random_state: int,
+        class_weight: str,
+        cv: int,
+        c: float,
+        scoring: str,
 ) -> List[str]:
     temp_res_dict = Parallel(n_jobs=n_jobs)(
         delayed(_calc_iv_dict)(x, y, feature) for feature in feature_names
@@ -225,8 +231,21 @@ def iv_feature_select(
     res_dict = {}
     for d in temp_res_dict:
         res_dict.update(d)
-    return [feature for feature in dict(sorted(res_dict.items(), key=itemgetter(1), reverse=True)) if
-            res_dict[feature] >= iv_threshold][:max_vars]
+
+    feature_names = [feature for feature in dict(sorted(res_dict.items(), key=itemgetter(1), reverse=True)) if
+                     res_dict[feature] >= iv_threshold][:max_vars]
+    feature_names = _check_correlation_threshold(
+        x, y,
+        feature_names=feature_names,
+        corr_threshold=corr_threshold,
+        random_state=random_state,
+        class_weight=class_weight,
+        cv=cv,
+        c=c,
+        scoring=scoring,
+        n_jobs=n_jobs
+    )
+    return feature_names
 
 
 def _check_pvalue(model: sm.Logit) -> List[int]:

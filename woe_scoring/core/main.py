@@ -8,7 +8,8 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.multiclass import unique_labels
 
 from .binning.functions import cat_processing, find_cat_features, num_processing, prepare_data, refit
-from .model.functions import create_model, generate_sql, iv_feature_select, predict_proba, save_reports, save_scorecard_fn, \
+from .model.functions import create_model, generate_sql, iv_feature_select, predict_proba, save_reports, \
+    save_scorecard_fn, \
     sequential_feature_select
 
 
@@ -227,6 +228,12 @@ class CreateModel(BaseEstimator, TransformerMixin):
                 iv_threshold=self.iv_threshold,
                 max_vars=self.max_vars,
                 n_jobs=self.n_jobs,
+                random_state=self.random_state,
+                cv=self.cv,
+                scoring=self.scoring,
+                c=self.C,
+                class_weight=self.class_weight,
+                corr_threshold=self.corr_threshold,
             )
         elif self.selection_method == 'sequential':
             self.feature_names_ = sequential_feature_select(
@@ -251,7 +258,8 @@ class CreateModel(BaseEstimator, TransformerMixin):
             feature_names=self.feature_names_
         )
 
-        self.model_results = pd.read_html(self.model.summary().tables[1].as_html(), header=0, index_col=0)[0].reset_index()
+        self.model_results = pd.read_html(self.model.summary().tables[1].as_html(), header=0, index_col=0)[
+            0].reset_index()
         self.intercept_ = self.model_results.iloc[0, 1]
         self.coef_ = list(self.model_results.iloc[1:, 1])
         self.feature_names_ = list(self.model_results.iloc[1:, 0])
