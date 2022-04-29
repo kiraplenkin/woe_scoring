@@ -1,4 +1,5 @@
 import os
+from itertools import product
 from operator import itemgetter
 from typing import Dict, List, Union
 
@@ -82,37 +83,35 @@ def _check_correlation_threshold(
         scoring: str,
         n_jobs: int
 ) -> List[str]:
-    for var_a in feature_names:
-        for var_b in feature_names:
-            if (
-                    var_a != var_b
-                    and abs(x[feature_names].corr()[var_a][var_b]) >= corr_threshold
-            ):
-                if _calc_score(
-                        x,
-                        y,
-                        var_a,
-                        random_state,
-                        class_weight,
-                        cv,
-                        c,
-                        scoring,
-                        n_jobs,
-                ) > _calc_score(
+    iter = product(feature_names, feature_names)
+    for var_a, var_b in iter:
+        if (var_a != var_b) and (var_a in feature_names) and (var_b in feature_names) and abs(
+                x[feature_names].corr()[var_a][var_b]
+                ) >= corr_threshold:
+            if _calc_score(
                     x,
                     y,
-                    var_b,
+                    var_a,
                     random_state,
                     class_weight,
                     cv,
                     c,
                     scoring,
                     n_jobs,
-                ):
-                    feature_names.remove(var_b)
-                else:
-                    feature_names.remove(var_a)
-                break
+            ) > _calc_score(
+                x,
+                y,
+                var_b,
+                random_state,
+                class_weight,
+                cv,
+                c,
+                scoring,
+                n_jobs,
+            ):
+                feature_names.remove(var_b)
+            else:
+                feature_names.remove(var_a)
     return feature_names
 
 
