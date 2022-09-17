@@ -138,7 +138,7 @@ def _calc_stats(
     bad_rate = bad / total if total != 0 else 0
     good = total - bad
     woe = np.log((good / all_good) / (bad / all_bad)) if good != 0 and bad != 0 else np.log(
-        (good + 0.5 / all_good) / (bad + 0.5 / all_bad)
+        ((good + 0.5) / all_good) / ((bad + 0.5) / all_bad)
     )
     iv = ((good / all_good) - (bad / all_bad)) * woe
     return {
