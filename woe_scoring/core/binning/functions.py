@@ -173,13 +173,11 @@ def _calc_max_bins(bins, max_bins: float) -> int:
     return max(int(len(bins) * max_bins), 2)
 
 
-def prepare_data(x: Union[pd.DataFrame, np.ndarray], special_cols: List[str] = None, unused_cols: List[str] = None):
+def prepare_data(x: Union[pd.DataFrame, np.ndarray], special_cols: List[str] = None):
     if not isinstance(x, pd.DataFrame):
         raise TypeError("data should be pandas data frame")
     if special_cols:
-        x.drop(special_cols, axis=1, inplace=True)
-    if unused_cols:
-        x.drop(unused_cols, axis=1, inplace=True)
+        x = x.drop(special_cols, axis=1)
     feature_names = x.columns
     return x, feature_names
 

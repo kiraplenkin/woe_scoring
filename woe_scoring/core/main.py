@@ -215,7 +215,10 @@ class CreateModel(BaseEstimator, TransformerMixin):
         self.model = None
 
     def fit(self, x: pd.DataFrame, y: Union[pd.Series, np.ndarray]):
-        x, self.feature_names_ = prepare_data(x, special_cols=self.special_cols, unused_cols=self.unused_cols)
+        x, self.feature_names_ = prepare_data(x, special_cols=self.special_cols)
+
+        if self.unused_cols:
+            self.feature_names_ = [feature for feature in self.feature_names_ if feature not in self.unused_cols]
 
         if self.C is None:
             self.C = 1.0e4 / x.shape[0]
