@@ -236,6 +236,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
                 c=self.C,
                 class_weight=self.class_weight,
                 corr_threshold=self.corr_threshold,
+                min_pct_group=self.min_pct_group,
             )
         elif self.selection_method == 'sequential':
             self.feature_names_ = sequential_feature_select(
@@ -243,6 +244,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
                 feature_names=self.feature_names_,
                 gini_threshold=self.gini_threshold,
                 corr_threshold=self.corr_threshold,
+                min_pct_group=self.min_pct_group,
                 random_state=self.random_state,
                 class_weight=self.class_weight,
                 max_vars=self.max_vars,
