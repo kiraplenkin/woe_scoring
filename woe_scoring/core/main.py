@@ -183,6 +183,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
             gini_threshold: float = 5.0,
             iv_threshold: float = 0.05,
             corr_threshold: float = 0.5,
+            min_pct_group: float = 0.05,
             random_state: int = None,
             class_weight: str = None,
             direction: str = "forward",
@@ -200,6 +201,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
         self.gini_threshold = gini_threshold
         self.iv_threshold = iv_threshold
         self.corr_threshold = corr_threshold
+        self.min_pct_group = min_pct_group
         self.random_state = random_state
         self.class_weight = class_weight
         self.direction = direction
