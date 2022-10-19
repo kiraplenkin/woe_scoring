@@ -121,7 +121,8 @@ def _check_min_pct_group(
         min_pct_group: float,
 ) -> List[str]:
     to_drop = [
-        feature_name for feature_name in feature_names if x[feature_name].value_counts().min() < min_pct_group
+        feature_name for feature_name in feature_names if
+        x[feature_name].value_counts(normalize=True).min() < min_pct_group
     ]
     return [var for var in feature_names if var not in to_drop]
 
