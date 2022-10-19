@@ -87,7 +87,7 @@ def _check_correlation_threshold(
     for var_a, var_b in iter:
         if (var_a != var_b) and (var_a in feature_names) and (var_b in feature_names) and abs(
                 x[feature_names].corr()[var_a][var_b]
-                ) >= corr_threshold:
+        ) >= corr_threshold:
             if _calc_score(
                     x,
                     y,
@@ -113,6 +113,17 @@ def _check_correlation_threshold(
             else:
                 feature_names.remove(var_a)
     return feature_names
+
+
+def _check_min_pct_group(
+        x: [pd.DataFrame, np.ndarray],
+        feature_names: List[str],
+        min_pct_group: float,
+) -> List[str]:
+    to_drop = [
+        feature_name for feature_name in feature_names if x[feature_name].value_counts().min() < min_pct_group
+    ]
+    return [var for var in feature_names if var not in to_drop]
 
 
 def _feature_selector(
@@ -151,6 +162,7 @@ def sequential_feature_select(
         feature_names: List[str],
         gini_threshold: float,
         corr_threshold: float,
+        min_pct_group: float,
         random_state: int,
         class_weight: str,
         max_vars: Union[int, float],
@@ -160,6 +172,12 @@ def sequential_feature_select(
         scoring: str,
         n_jobs: int,
 ) -> List[str]:
+    feature_names = _check_min_pct_group(
+        x,
+        feature_names=feature_names,
+        min_pct_group=min_pct_group,
+    )
+
     feature_names = _check_features_gini_threshold(
         x, y,
         feature_names=feature_names,
@@ -218,6 +236,7 @@ def iv_feature_select(
         max_vars: int,
         n_jobs: int,
         corr_threshold: float,
+        min_pct_group: float,
         random_state: int,
         class_weight: str,
         cv: int,
@@ -233,6 +252,13 @@ def iv_feature_select(
 
     feature_names = [feature for feature in dict(sorted(res_dict.items(), key=itemgetter(1), reverse=True)) if
                      res_dict[feature] >= iv_threshold][:max_vars]
+
+    feature_names = _check_min_pct_group(
+        x,
+        feature_names=feature_names,
+        min_pct_group=min_pct_group,
+    )
+
     feature_names = _check_correlation_threshold(
         x, y,
         feature_names=feature_names,
@@ -312,9 +338,9 @@ def generate_sql(
                         f" WHEN {var.replace('WOE_', '')} in {bin['bin']} THEN {bin['woe']}".replace(
                             "[", "("
                         )
-                            .replace("]", ")")
-                            .replace(", -1", "")
-                            .replace(", Missing", "")
+                        .replace("]", ")")
+                        .replace(", -1", "")
+                        .replace(", Missing", "")
                         for bin in encoder.woe_iv_dict[i][
                             var.replace("WOE_", "")
                         ]
