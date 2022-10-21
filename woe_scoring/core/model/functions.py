@@ -395,9 +395,10 @@ def generate_sql(
 
 
 def _calc_score_points(woe, coef, intercept, factor, offset: float, n_features: int) -> int:
-    b = offset - factor * intercept
-    s = -factor * coef * woe
-    return int(round(s + b / n_features))
+    # b = offset - factor * intercept
+    # s = -factor * coef * woe
+    # return int(round(s + b / n_features))
+    return -(woe * coef + intercept / n_features) * factor + offset / n_features
 
 
 def _calc_stats_for_feature(
@@ -455,6 +456,7 @@ def _calc_stats_for_feature(
                             factor=factor,
                             offset=offset,
                             n_features=len(feature_names),
+
                         )
                     )
     return pd.DataFrame.from_dict(result_dict)
