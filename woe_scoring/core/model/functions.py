@@ -1,13 +1,10 @@
 import os
-from itertools import product
-from operator import itemgetter
-from typing import Dict, List, Union
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from joblib import Parallel, delayed
-from sklearn.feature_selection import SequentialFeatureSelector
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
 
@@ -40,6 +37,9 @@ def _calc_score(
     model = LogisticRegression(
         random_state=random_state,
         class_weight=class_weight,
+        solver='saga',
+        max_iter=1000,
+        warm_start=True,
         n_jobs=n_jobs,
         C=c,
     )
@@ -113,6 +113,7 @@ def _check_correlation_threshold(
         n_jobs: int
 ) -> List[str]:
     """Check if a feature has a correlation score below a threshold.
+
     Args:
         x: DataFrame or numpy array.
         y: Series or numpy array.
@@ -124,46 +125,46 @@ def _check_correlation_threshold(
         c: Regularization parameter.
         scoring: Scoring method.
         n_jobs: Number of jobs.
-    Returns:
-        List of features with a correlation score below a threshold."""
 
-    iterator = product(feature_names, feature_names)
+    Returns:
+        List of features with a correlation score below a threshold.
+    """
+
+    if isinstance(x, np.ndarray):
+        x = pd.DataFrame(x, columns=feature_names)
+
     correlation = x[feature_names].corr()
-    for var_a, var_b in iterator:
-        if (var_a != var_b) and (var_a in feature_names) and (var_b in feature_names) and abs(
-                correlation[var_a][var_b]
-        ) >= corr_threshold:
-            if _calc_score(
-                    x,
-                    y,
-                    var_a,
-                    random_state,
-                    class_weight,
-                    cv,
-                    c,
-                    scoring,
-                    n_jobs,
-            ) > _calc_score(
-                x,
-                y,
-                var_b,
-                random_state,
-                class_weight,
-                cv,
-                c,
-                scoring,
-                n_jobs,
-            ):
-                feature_names.remove(var_b)
+    mask = np.tril(np.ones_like(correlation, dtype=bool), k=-1)
+    correlation = correlation.where(mask)
+    correlation = correlation.stack().reset_index()
+    correlation.columns = ['feature_a', 'feature_b', 'correlation']
+    correlation = correlation.query(f"correlation.abs() >= {corr_threshold}")
+    features_to_remove = []
+
+    for feature in feature_names:
+        if feature in features_to_remove:
+            continue
+        correlated_features = correlation.query(f"feature_a == '{feature}' or feature_b == '{feature}'")
+        if len(correlated_features) == 0:
+            continue
+        scores = []
+        for _, row in correlated_features.iterrows():
+            if row['feature_a'] == feature:
+                other_feature = row['feature_b']
             else:
-                feature_names.remove(var_a)
-    return feature_names
+                other_feature = row['feature_a']
+            score = _calc_score(x, y, other_feature, random_state, class_weight, cv, c, scoring, n_jobs)
+            scores.append(score)
+        if all(score <= scores[0] for score in scores):
+            features_to_remove.append(feature)
+
+    return [f for f in feature_names if f not in features_to_remove]
 
 
 def _check_min_pct_group(
-        x: Union[pd.DataFrame, np.ndarray],
-        feature_names: List[str],
-        min_pct_group: float,
+    x: Union[pd.DataFrame, np.ndarray],
+    feature_names: List[str],
+    min_pct_group: float,
 ) -> List[str]:
     """Check if a feature has a minimum percentage of values below a threshold.
     Args:
@@ -172,7 +173,7 @@ def _check_min_pct_group(
         min_pct_group: Minimum percentage of values below a threshold.
     Returns:
         List of features with a minimum percentage of values below a threshold."""
-
+    
     to_drop = [
         feature_name for feature_name in feature_names if
         x[feature_name].value_counts(normalize=True).min() < min_pct_group
@@ -180,231 +181,25 @@ def _check_min_pct_group(
     return [var for var in feature_names if var not in to_drop]
 
 
-def _feature_selector(
-        x: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.Series, np.ndarray],
-        feature_names: List[str],
-        random_state: int,
-        class_weight: str,
-        cv: int,
-        c: float,
-        n_jobs: int,
-        max_vars: Union[int, float],
-        direction: str,
-        scoring: str,
-) -> List[str]:
-    """Feature selector.
-    Args:
-        x: DataFrame or numpy array.
-        y: Series or numpy array.
-        feature_names: List of features.
-        random_state: Random state.
-        class_weight: Class weight.
-        cv: Number of folds.
-        c: Regularization parameter.
-        n_jobs: Number of jobs.
-        max_vars: Maximum number of features.
-        direction: Direction of selection.
-        scoring: Scoring method.
-    Returns:
-        List of features."""
+def _get_high_pval_positive_vars(X: pd.DataFrame, y: Union[pd.Series, np.ndarray], feature_names: List[str]) -> List[str]:
+        """
+        Returns variables with high p-values and positive sign.
 
-    sfs = SequentialFeatureSelector(
-        LogisticRegression(
-            random_state=random_state,
-            class_weight=class_weight,
-            n_jobs=n_jobs,
-            C=c,
-        ),
-        n_features_to_select=max_vars,
-        direction=direction,
-        cv=cv,
-        n_jobs=n_jobs,
-        scoring=scoring,
-    )
-    sfs.fit(x[feature_names], y)
-    return list(np.array(feature_names)[list(sfs.get_support())])
+        Args:
+            X: DataFrame.
+            y: Series or numpy array.
+            feature_names: List of features.
 
-
-def sequential_feature_select(
-        x: pd.DataFrame,
-        y: Union[pd.Series, np.ndarray],
-        feature_names: List[str],
-        gini_threshold: float,
-        corr_threshold: float,
-        min_pct_group: float,
-        random_state: int,
-        class_weight: str,
-        max_vars: Union[int, float],
-        direction: str,
-        cv: int,
-        c: float,
-        scoring: str,
-        n_jobs: int,
-) -> List[str]:
-    """Sequential feature selector.
-    Args:
-        x: DataFrame or numpy array.
-        y: Series or numpy array.
-        feature_names: List of features.
-        gini_threshold: Gini threshold.
-        corr_threshold: Correlation threshold.
-        min_pct_group: Minimum percentage of values below a threshold.
-        random_state: Random state.
-        class_weight: Class weight.
-        cv: Number of folds.
-        c: Regularization parameter.
-        scoring: Scoring method.
-        n_jobs: Number of jobs.
-    Returns:
-        List of features."""
-
-    feature_names = _check_min_pct_group(
-        x,
-        feature_names=feature_names,
-        min_pct_group=min_pct_group,
-    )
-
-    feature_names = _check_features_gini_threshold(
-        x, y,
-        feature_names=feature_names,
-        gini_threshold=gini_threshold,
-        random_state=random_state,
-        class_weight=class_weight,
-        cv=cv,
-        c=c,
-        scoring=scoring,
-        n_jobs=n_jobs
-    )
-
-    feature_names = _feature_selector(
-        x, y,
-        feature_names=feature_names,
-        random_state=random_state,
-        class_weight=class_weight,
-        cv=cv,
-        c=c,
-        n_jobs=n_jobs,
-        max_vars=max_vars,
-        direction=direction,
-        scoring=scoring,
-    )
-
-    feature_names = _check_correlation_threshold(
-        x, y,
-        feature_names=feature_names,
-        corr_threshold=corr_threshold,
-        random_state=random_state,
-        class_weight=class_weight,
-        cv=cv,
-        c=c,
-        scoring=scoring,
-        n_jobs=n_jobs
-    )
-    return feature_names
-
-
-def _calc_iv_dict(x: pd.DataFrame, y: np.ndarray, feature: str) -> Dict:
-    """Calculate IV for a feature.
-    Args:
-        x: DataFrame or numpy array.
-        y: Series or numpy array.
-        feature: Feature name.
-    Returns:
-        Dictionary with feature name as key and IV as value."""
-
-    _iv = 0
-    for value in x[feature].sort_values().unique():
-        bad = y[x[feature] == value].sum()
-        good = len(y[x[feature] == value]) - bad
-        all_bad = y.sum()
-        all_good = len(y) - all_bad
-        _iv += ((good / all_good) - (bad / all_bad)) * value
-    return {feature: _iv}
-
-
-def iv_feature_select(
-        x: pd.DataFrame,
-        y: Union[pd.Series, np.ndarray],
-        feature_names: List[str],
-        iv_threshold: float,
-        max_vars: int,
-        n_jobs: int,
-        corr_threshold: float,
-        min_pct_group: float,
-        random_state: int,
-        class_weight: str,
-        cv: int,
-        c: float,
-        scoring: str,
-) -> List[str]:
-    """Information value feature selector.
-    Args:
-        x: DataFrame or numpy array.
-        y: Series or numpy array.
-        feature_names: List of features.
-        iv_threshold: Information value threshold.
-        max_vars: Maximum number of features.
-        n_jobs: Number of jobs.
-        corr_threshold: Correlation threshold.
-        min_pct_group: Minimum percentage of values below a threshold.
-        random_state: Random state.
-        class_weight: Class weight.
-        cv: Number of folds.
-        c: Regularization parameter.
-        scoring: Scoring method.
-    Returns:
-        List of features."""
-
-    temp_res_dict = Parallel(n_jobs=n_jobs)(
-        delayed(_calc_iv_dict)(x, y, feature) for feature in feature_names
-    )
-    res_dict = {}
-    for d in temp_res_dict:
-        res_dict |= d
-
-    feature_names = [feature for feature in dict(sorted(res_dict.items(), key=itemgetter(1), reverse=True)) if
-                     res_dict[feature] >= iv_threshold][:max_vars]
-
-    feature_names = _check_min_pct_group(
-        x,
-        feature_names=feature_names,
-        min_pct_group=min_pct_group,
-    )
-
-    feature_names = _check_correlation_threshold(
-        x, y,
-        feature_names=feature_names,
-        corr_threshold=corr_threshold,
-        random_state=random_state,
-        class_weight=class_weight,
-        cv=cv,
-        c=c,
-        scoring=scoring,
-        n_jobs=n_jobs
-    )
-    return feature_names
-
-
-def _check_pvalue_and_sign(model: sm.Logit) -> List[int]:
-    """Check p-value.
-    Args:
-        model: Model.
-    Returns:
-        List of variables with p-values > 0.05 or positive sign."""
-
-    # return [
-    #     model.wald_test_terms().table.index[i]
-    #     for i, pvalue in enumerate(model.wald_test_terms().table["pvalue"])
-    #     if pvalue > 0.05
-    # ]
-
-    return [
-        model.summary().tables[1].data[i][0]
-        for i in range(2, len(model.summary().tables[1].data))
-        if float(model.summary().tables[1].data[i][1]) > 0
-        or float(model.summary().tables[1].data[i][4]) > 0.05
-    ]
+        Returns:
+            List of variables with high p-values and positive sign.
+        """
+        model = sm.Logit(y, sm.add_constant(X[feature_names])).fit()
+        summary_table = model.summary().tables[1].data
+        return [
+            row[0]
+            for row in summary_table[2:]
+            if float(row[1]) > 0 or float(row[4]) > 0.05
+        ]
 
 
 def create_model(
@@ -420,15 +215,7 @@ def create_model(
     Returns:
         Model."""
 
-    model = sm.Logit(y, sm.add_constant(x[feature_names])).fit()
-
-    to_drop = _check_pvalue_and_sign(model)
-    while len(to_drop) > 0:
-        feature_names = [feature for feature in feature_names if feature not in to_drop]
-        model = sm.Logit(y, sm.add_constant(x[feature_names])).fit()
-        to_drop = _check_pvalue_and_sign(model)
-
-    return model
+    return sm.Logit(y, sm.add_constant(x[feature_names])).fit()
 
 
 def save_reports(
@@ -555,13 +342,13 @@ def _calc_score_points(woe, coef, intercept, factor, offset: float, n_features: 
 
 
 def _calc_stats_for_feature(
-        idx,
-        feature,
-        feature_names: List[str],
-        encoder,
-        model_results,
-        factor: float,
-        offset: float,
+    idx,
+    feature,
+    feature_names: List[str],
+    encoder,
+    model_results,
+    factor: float,
+    offset: float,
 ) -> pd.DataFrame:
     """Calculate stats for feature.
     Args:
@@ -573,8 +360,8 @@ def _calc_stats_for_feature(
         factor: Factor.
         offset: Offset.
     Returns:
-        Stats for feature."""
-
+        Stats for feature.
+    """
     result_dict = {
         "feature": [],
         "coef": [],
@@ -589,41 +376,46 @@ def _calc_stats_for_feature(
         "event_rate": [],
         "score_ball": [],
     }
+
+    woe_iv_dict = encoder.woe_iv_dict
+    intercept = model_results.iloc[0, 1]
+    n_features = len(feature_names)
+
     if idx < 1:
-        _update_result_dict(
-            result_dict, feature, model_results, idx
-        )
+        _update_result_dict(result_dict, feature, model_results, idx)
         for key, value in result_dict.items():
             if key not in ["feature", "coef", "pvalue"]:
                 value.append("-")
     else:
-        for i, _ in enumerate(encoder.woe_iv_dict):
-            if list(encoder.woe_iv_dict[i])[0] == feature.replace("WOE_", ""):
-                for _bin in encoder.woe_iv_dict[i][feature.replace("WOE_", "")]:
-                    _update_result_dict(
-                        result_dict, feature, model_results, idx
-                    )
-                    result_dict["bin"].append(
-                        [val if val != -1 else str(val).replace("-1", "missing") for val in _bin["bin"]]
-                    )
-                    result_dict["WOE"].append(_bin["woe"])
-                    result_dict["IV"].append(_bin["iv"])
-                    result_dict["percent_of_population"].append(_bin["pct"])
-                    result_dict["total"].append(_bin["total"])
-                    result_dict["event_cnt"].append(_bin["bad"])
-                    result_dict["non_event_cnt"].append(result_dict["total"][-1] - result_dict["event_cnt"][-1])
-                    result_dict["event_rate"].append(_bin["bad_rate"])
+        for woe_iv in woe_iv_dict:
+            if list(woe_iv.keys())[0] == feature.replace("WOE_", ""):
+                feature_woe_iv = woe_iv[feature.replace("WOE_", "")]
+                for bin_info in feature_woe_iv:
+                    _update_result_dict(result_dict, feature, model_results, idx)
+                    bin_values = bin_info["bin"]
+                    bin_values_str = [
+                        str(val).replace("-1", "missing") if val == -1 else val
+                        for val in bin_values
+                    ]
+                    result_dict["bin"].append(bin_values_str)
+                    result_dict["WOE"].append(bin_info["woe"])
+                    result_dict["IV"].append(bin_info["iv"])
+                    result_dict["percent_of_population"].append(bin_info["pct"])
+                    result_dict["total"].append(bin_info["total"])
+                    result_dict["event_cnt"].append(bin_info["bad"])
+                    result_dict["non_event_cnt"].append(bin_info["good"])
+                    result_dict["event_rate"].append(bin_info["bad_rate"])
                     result_dict["score_ball"].append(
                         _calc_score_points(
                             woe=result_dict["WOE"][-1],
                             coef=result_dict["coef"][-1],
-                            intercept=model_results.iloc[0, 1],
+                            intercept=intercept,
                             factor=factor,
                             offset=offset,
-                            n_features=len(feature_names),
-
+                            n_features=n_features,
                         )
                     )
+
     return pd.DataFrame.from_dict(result_dict)
 
 
@@ -659,20 +451,12 @@ def _calc_stats(
     Returns:
         Stats."""
 
-    feature_stats = []
-    for idx, feature in enumerate(model_results.iloc[:, 0]):
-        res_df = _calc_stats_for_feature(
-            idx,
-            feature,
-            feature_names,
-            encoder,
-            model_results,
-            factor,
-            offset
-        )
-        res_df.name = feature.replace("WOE_", "")
-        feature_stats.append(res_df)
-    return feature_stats
+    return Parallel(n_jobs=-1, backend="multiprocessing")(
+        delayed(_calc_stats_for_feature)(
+            idx, feature, feature_names, encoder, model_results, factor, offset
+        ).rename(feature.replace("WOE_", ""))
+        for idx, feature in enumerate(model_results.iloc[:, 0])
+    )
 
 
 def _build_excel_sheet_with_charts(
