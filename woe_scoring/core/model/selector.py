@@ -65,7 +65,7 @@ class FeatureSelector:
             scoring=self.scoring
         )
         
-        return self._extracted_from__select_by_rfe_15(
+        return self._feature_selection(
             data, feature_names, target, selector
         )
 
@@ -84,12 +84,11 @@ class FeatureSelector:
             min_features_to_select=self.max_vars,
             n_jobs=self.n_jobs
         )
-        return self._extracted_from__select_by_rfe_15(
+        return self._feature_selection(
             data, feature_names, target, selector
         )
 
-    # TODO Rename this here and in `_select_by_sfs` and `_select_by_rfe`
-    def _extracted_from__select_by_rfe_15(self, data, feature_names, target, selector):
+    def _feature_selection(self, data, feature_names, target, selector):
         feature_names = _check_min_pct_group(
             data, feature_names=feature_names, min_pct_group=self.min_pct_group
         )
