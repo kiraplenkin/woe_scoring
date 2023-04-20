@@ -1,1 +1,1 @@
-from woe_scoring.core.main import WOETransformer, CreateModel
+from woe_scoring.core.main import CreateModel, WOETransformer
