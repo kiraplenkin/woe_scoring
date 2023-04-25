@@ -9,10 +9,11 @@ from sklearn.utils.multiclass import unique_labels
 
 from .binning.functions import (cat_processing, find_cat_features,
                                 num_processing, prepare_data, refit)
-from .model.functions import (_check_correlation_threshold, create_model,
-                              generate_sql, predict_proba, save_reports,
-                              save_scorecard_fn)
+from .model.functions import (_check_correlation_threshold,
+                              generate_sql, save_reports, _check_min_pct_group, _check_features_gini_threshold,
+                              save_scorecard_fn, _find_bad_features)
 from .model.selector import FeatureSelector
+from .model.model import Model
 
 
 class NpEncoder(json.JSONEncoder):
@@ -208,7 +209,8 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 class CreateModel(BaseEstimator, TransformerMixin):
     def __init__(
         self,
-        selection_method: str = 'rfe', # 'rfe' or 'sfe'
+        selection_method: str = 'rfe', # rfe or sfs or iv
+        model_type: str = 'sklearn', # 'sklearn' or 'statsmodel'
         max_vars: Union[int, float, None] = None,
         special_cols: List[str] = None,
         unused_cols: List[str] = None,
@@ -218,14 +220,15 @@ class CreateModel(BaseEstimator, TransformerMixin):
         corr_threshold: float = 0.5,
         min_pct_group: float = 0.05,
         random_state: int = None,
-        class_weight: str = None,
+        class_weight: str = 'balanced',
         direction: str = "forward",
         cv: int = 3,
-        C: float = None,
+        l1_exp_scale: int  = 4,
+        l1_grid_size: int = 20,
         scoring: str = "roc_auc",
     ):
-        self.model_results = None
         self.selection_method = selection_method
+        self.model_type = model_type
         self.max_vars = max_vars
         self.special_cols = special_cols or []
         self.unused_cols = unused_cols or []
@@ -238,27 +241,44 @@ class CreateModel(BaseEstimator, TransformerMixin):
         self.class_weight = class_weight
         self.direction = direction
         self.cv = cv
-        self.C = C
+        self.l1_exp_scale = l1_exp_scale
+        self.l1_grid_size = l1_grid_size
         self.scoring = scoring
 
-        self.feature_names_: List[str] = []
-        self.coef: List[float] = []
-        self.intercept: float = 0.0
+        self.coef_ = None
+        self.intercept_ = None
+        self.feature_names_ = []
+        self.model_score_ = None
+        self.pvalues_ = []
+
         self.model = None
 
-    def fit(self, x: pd.DataFrame, y: Union[pd.Series, np.ndarray]):
-        x, self.feature_names_ = prepare_data(data=x, special_cols=self.special_cols)
+
+    def fit(self, data: pd.DataFrame, target: Union[pd.Series, np.ndarray]) -> None:
+        data, self.feature_names_ = prepare_data(data=data, special_cols=self.special_cols)
 
         if self.unused_cols:
             self.feature_names_ = [feature for feature in self.feature_names_ if feature not in self.unused_cols]
-        
-        if self.C is None:
-            self.C = 1.0e4 / x.shape[0]
 
         if self.max_vars is not None and self.max_vars < 1:
             self.max_vars = int(len(self.feature_names_) * self.max_vars)
 
-        selector = FeatureSelector(
+        self.feature_names_ = _check_min_pct_group(
+            x=data, feature_names=self.feature_names_, min_pct_group=self.min_pct_group
+        )
+
+        self.feature_names_ = _check_features_gini_threshold(
+            x=data, y=target,
+            feature_names=self.feature_names_,
+            gini_threshold=self.gini_threshold,
+            random_state=self.random_state,
+            class_weight=self.class_weight,
+            cv=self.cv,
+            scoring=self.scoring,
+            n_jobs=self.n_jobs
+        )
+        
+        feature_selector = FeatureSelector(
             selection_type=self.selection_method,
             max_vars=self.max_vars,
             n_jobs=self.n_jobs,
@@ -266,43 +286,69 @@ class CreateModel(BaseEstimator, TransformerMixin):
             class_weight=self.class_weight,
             direction=self.direction,
             cv=self.cv,
-            C=self.C,
+            l1_exp_scale=self.l1_exp_scale,
+            l1_grid_size=self.l1_grid_size,
             scoring=self.scoring,
             gini_threshold=self.gini_threshold,
             min_pct_group=self.min_pct_group,
+            iv_threshold=self.iv_threshold
         )
-        self.feature_names_ = selector.select(x, y, self.feature_names_)
-        
-        if len(self.feature_names_) == 0:
-            raise ValueError("No features selected")
-        
-        self.feature_names_ = _check_correlation_threshold(
-            x, y,
-            self.feature_names_,
-            self.corr_threshold,
-            self.random_state,
-            self.class_weight,
-            self.cv,
-            self.C,
-            self.scoring,
-            self.n_jobs
-        )
-        self.model = create_model(
-            x, y,
-            feature_names=self.feature_names_
+        selected_model = Model(
+            model_type=self.model_type,
+            n_jobs=self.n_jobs,
+            l1_exp_scale=self.l1_exp_scale,
+            l1_grid_size=self.l1_grid_size,
+            cv=self.cv,
+            class_weight=self.class_weight,
+            random_state=self.random_state,
+            scoring=self.scoring
         )
 
-        self.model_results = pd.read_html(self.model.summary().tables[1].as_html(), header=0, index_col=0)[
-            0].reset_index()
-        self.intercept_ = self.model_results.iloc[0, 1]
-        self.coef_ = list(self.model_results.iloc[1:, 1])
-        self.feature_names_ = list(self.model_results.iloc[1:, 0])
+        selected_features = feature_selector.select(data, target, self.feature_names_)
+        selected_features = _check_correlation_threshold(
+            data, target,
+            feature_names=selected_features,
+            corr_threshold=self.corr_threshold,
+            random_state=self.random_state,
+            class_weight=self.class_weight,
+            n_jobs=self.n_jobs,
+            cv=self.cv,
+            scoring=self.scoring,
+        )
+        self.model = selected_model.get_model(data[selected_features], target)
+
+        while True:
+            bad_feature_idx = _find_bad_features(selected_model)
+            if len(bad_feature_idx) == 0:
+                break
+            self.feature_names_ = [feature for feature in self.feature_names_ if feature not in [self.feature_names_[i] for i in bad_feature_idx]]
+            selected_features = feature_selector.select(data, target, self.feature_names_)
+            selected_features = _check_correlation_threshold(
+                data, target,
+                feature_names=selected_features,
+                corr_threshold=self.corr_threshold,
+                random_state=self.random_state,
+                class_weight=self.class_weight,
+                n_jobs=self.n_jobs,
+                cv=self.cv,
+                scoring=self.scoring,
+            )
+            self.model = selected_model.get_model(data[selected_features], target)
+        
+        self.coef_ = selected_model.coef_
+        self.intercept_ = selected_model.intercept_
+        self.feature_names_ = selected_model.feature_names_
+        self.model_score_ = selected_model.model_score_
+        self.pvalues_ = selected_model.pvalues_
+
+        return self.model
+
 
     def save_reports(self, path: str):
         save_reports(self.model, path)
 
-    def predict_proba(self, x: pd.DataFrame) -> np.ndarray:
-        return predict_proba(x, self.model)
+    def predict_proba(self, data: pd.DataFrame) -> np.ndarray:
+        return self.model.predict_proba(data)
 
     def generate_sql(self, encoder) -> str:
         return generate_sql(

@@ -1,9 +1,11 @@
 import os
-from typing import List, Union
+from typing import List, Union, Dict
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from itertools import product
+from .model import Model
 from joblib import Parallel, delayed
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
@@ -13,12 +15,11 @@ def _calc_score(
         x: Union[pd.DataFrame, np.ndarray],
         y: Union[pd.Series, np.ndarray],
         var: str,
-        random_state: int = None,
-        class_weight: str = None,
-        cv: int = 3,
-        c: float = 1.0,
-        scoring: str = "roc_auc",
-        n_jobs: int = 1,
+        random_state: int,
+        class_weight: str,
+        cv: int,
+        scoring: str,
+        n_jobs: int
 ) -> float:
     """Calculate the score of a feature.
     Args:
@@ -37,11 +38,9 @@ def _calc_score(
     model = LogisticRegression(
         random_state=random_state,
         class_weight=class_weight,
-        solver='saga',
         max_iter=1000,
-        warm_start=True,
         n_jobs=n_jobs,
-        C=c,
+        warm_start=True,
     )
     scores = cross_val_score(
         model,
@@ -59,12 +58,11 @@ def _check_features_gini_threshold(
         y: Union[pd.Series, np.ndarray],
         feature_names: List[str],
         gini_threshold: float,
-        random_state: int = None,
-        class_weight: str = None,
-        cv: int = 3,
-        c: float = None,
-        scoring: str = "roc_auc",
-        n_jobs: int = None
+        random_state: int,
+        class_weight: str,
+        cv: int,
+        scoring: str,
+        n_jobs: int
 ) -> List[str]:
     """Check if a feature has a Gini score below a threshold.
     Args:
@@ -85,15 +83,14 @@ def _check_features_gini_threshold(
         feature_name
         for feature_name in feature_names
         if _calc_score(
-            x,
-            y,
-            feature_name,
-            random_state,
-            class_weight,
-            cv,
-            c,
-            scoring,
-            n_jobs,
+            x=x,
+            y=y,
+            var=feature_name,
+            random_state=random_state,
+            class_weight=class_weight,
+            cv=cv,
+            n_jobs=n_jobs,
+            scoring=scoring,
         )
            < gini_threshold
     ]
@@ -108,9 +105,8 @@ def _check_correlation_threshold(
         random_state: int,
         class_weight: str,
         cv: int,
-        c: float,
+        n_jobs: int,
         scoring: str,
-        n_jobs: int
 ) -> List[str]:
     """Check if a feature has a correlation score below a threshold.
 
@@ -130,35 +126,35 @@ def _check_correlation_threshold(
         List of features with a correlation score below a threshold.
     """
 
-    if isinstance(x, np.ndarray):
-        x = pd.DataFrame(x, columns=feature_names)
-
+    iterator = product(feature_names, feature_names)
     correlation = x[feature_names].corr()
-    mask = np.tril(np.ones_like(correlation, dtype=bool), k=-1)
-    correlation = correlation.where(mask)
-    correlation = correlation.stack().reset_index()
-    correlation.columns = ['feature_a', 'feature_b', 'correlation']
-    correlation = correlation.query(f"correlation.abs() >= {corr_threshold}")
-    features_to_remove = []
-
-    for feature in feature_names:
-        if feature in features_to_remove:
-            continue
-        correlated_features = correlation.query(f"feature_a == '{feature}' or feature_b == '{feature}'")
-        if len(correlated_features) == 0:
-            continue
-        scores = []
-        for _, row in correlated_features.iterrows():
-            if row['feature_a'] == feature:
-                other_feature = row['feature_b']
+    for var_a, var_b in iterator:
+        if (var_a != var_b) and (var_a in feature_names) and (var_b in feature_names) and abs(
+                correlation[var_a][var_b]
+        ) >= corr_threshold:
+            if _calc_score(
+                x=x,
+                y=y,
+                var=var_a,
+                random_state=random_state,
+                class_weight=class_weight,
+                cv=cv,
+                n_jobs=n_jobs,
+                scoring=scoring,
+            ) > _calc_score(
+                    x=x,
+                    y=y,
+                    var=var_b,
+                    random_state=random_state,
+                    class_weight=class_weight,
+                    cv=cv,
+                    n_jobs=n_jobs,
+                    scoring=scoring,
+                ):
+                feature_names.remove(var_b)
             else:
-                other_feature = row['feature_a']
-            score = _calc_score(x, y, other_feature, random_state, class_weight, cv, c, scoring, n_jobs)
-            scores.append(score)
-        if all(score <= scores[0] for score in scores):
-            features_to_remove.append(feature)
-
-    return [f for f in feature_names if f not in features_to_remove]
+                feature_names.remove(var_a)
+    return feature_names
 
 
 def _check_min_pct_group(
@@ -181,41 +177,31 @@ def _check_min_pct_group(
     return [var for var in feature_names if var not in to_drop]
 
 
-def _get_high_pval_positive_vars(X: pd.DataFrame, y: Union[pd.Series, np.ndarray], feature_names: List[str]) -> List[str]:
-        """
-        Returns variables with high p-values and positive sign.
-
-        Args:
-            X: DataFrame.
-            y: Series or numpy array.
-            feature_names: List of features.
-
-        Returns:
-            List of variables with high p-values and positive sign.
-        """
-        model = sm.Logit(y, sm.add_constant(X[feature_names])).fit()
-        summary_table = model.summary().tables[1].data
-        return [
-            row[0]
-            for row in summary_table[2:]
-            if float(row[1]) > 0 or float(row[4]) > 0.05
-        ]
-
-
-def create_model(
-        x: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.Series, np.ndarray],
-        feature_names: List[str],
-) -> sm.Logit:
-    """Create Logistic Regression model.
+def _find_bad_features(
+    model: Model
+) -> List[int]:
+    """Find features with high p-values and positive sign.
     Args:
-        x: DataFrame or numpy array.
-        y: Series or numpy array.
-        feature_names: List of features.
+        model: Model.
     Returns:
-        Model."""
+        List of features with high p-values and positive sign.
+    """
+    return [
+        i
+        for i in range(len(model.feature_names_))
+        if model.pvalues_[i] > 0.05 or model.coef_[i] > 0
+    ]
 
-    return sm.Logit(y, sm.add_constant(x[feature_names])).fit()
+
+def _calc_iv_dict(data: pd.DataFrame, target: np.ndarray, feature: str) -> Dict:
+    _iv = 0
+    for value in data[feature].sort_values().unique():
+        bad = target[data[feature] == value].sum()
+        good = len(target[data[feature] == value]) - bad
+        all_bad = target.sum()
+        all_good = len(target) - all_bad
+        _iv += ((good / all_good) - (bad / all_bad)) * value
+    return {feature: _iv}
 
 
 def save_reports(
@@ -239,17 +225,6 @@ def save_reports(
             model.wald_test_terms().summary_frame().to_string(outfile)
     except Exception as e:
         print(f"Problem with saving: {e}")
-
-
-def predict_proba(x: Union[pd.DataFrame, np.ndarray], model: sm.Logit):
-    """Predict probabilities.
-    Args:
-        x: DataFrame or numpy array.
-        model: Model.
-    Returns:
-        Probabilities."""
-
-    return model.predict(sm.add_constant(x))
 
 
 def generate_sql(
