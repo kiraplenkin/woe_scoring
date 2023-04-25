@@ -245,7 +245,7 @@ class CreateModel(BaseEstimator, TransformerMixin):
         self.l1_grid_size = l1_grid_size
         self.scoring = scoring
 
-        self.coef_ = None
+        self.coef_ = []
         self.intercept_ = None
         self.feature_names_ = []
         self.model_score_ = None
@@ -349,6 +349,10 @@ class CreateModel(BaseEstimator, TransformerMixin):
 
     def predict_proba(self, data: pd.DataFrame) -> np.ndarray:
         return self.model.predict_proba(data)
+        
+    def predict(self, data: pd.DataFrame) -> np.ndarray:
+        return self.model.predict(data)
+
 
     def generate_sql(self, encoder) -> str:
         return generate_sql(
