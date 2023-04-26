@@ -422,9 +422,10 @@ class CreateModel(BaseEstimator, TransformerMixin):
 
     def generate_sql(self, encoder) -> str:
         return generate_sql(
-            feature_names=self.feature_names_,
             encoder=encoder,
-            model_results=self.model_results
+            feature_names=self.feature_names_,
+            coef=self.coef_,
+            intercept=self.intercept_
         )
 
     def save_scorecard(
