@@ -256,9 +256,7 @@ def save_reports(
 
 
 def generate_sql(
-        feature_names: List[str],
-        encoder,
-        model_results,
+        encoder, feature_names: List[str], coef: List[float], intercept: float,
 ) -> str:
     sql = [
         "with a as " + "(SELECT ",
@@ -317,13 +315,13 @@ def generate_sql(
             " FROM )",
             ", b as (",
             "SELECT a.*",
-            f", REPLACE(1 / (1 + EXP(-({model_results.iloc[0, 1]}",
+            f", REPLACE(1 / (1 + EXP(-({intercept}",
         )
     )
 
     sql.extend(
-        f" + ({model_results.iloc[idx, 1]} * a.{model_results.iloc[idx, 0]})"
-        for idx in range(1, model_results.shape[0])
+        f" + ({coef[idx]} * a.{feature_names[idx]})"
+        for idx in range(len(feature_names))
     )
     sql.extend(("))), ',', '.') as PD", " FROM a) ", "SELECT * FROM b"))
     return "".join(sql)
