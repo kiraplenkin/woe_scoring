@@ -11,9 +11,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
 
 
-def _calc_score(
-        x: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.Series, np.ndarray],
+def calculate_gini_score(
+        data: Union[pd.DataFrame, np.ndarray],
+        target: Union[pd.Series, np.ndarray],
         var: str,
         random_state: int,
         class_weight: str,
@@ -21,31 +21,33 @@ def _calc_score(
         scoring: str,
         n_jobs: int
 ) -> float:
-    """Calculate the score of a feature.
-    Args:
-        x: DataFrame or numpy array.
-        y: Series or numpy array.
-        var: Name of the feature.
-        random_state: Random state.
-        class_weight: Class weight.
-        cv: Number of folds.
-        c: Regularization parameter.
-        scoring: Scoring method.
-        n_jobs: Number of jobs.
-    Returns:
-        Score of the feature."""
+    """
+    Calculate the Gini score for a given feature using Logistic Regression.
 
-    model = LogisticRegression(
-        random_state=random_state,
-        class_weight=class_weight,
-        max_iter=1000,
-        n_jobs=n_jobs,
-        warm_start=True,
-    )
+    Args:
+        data: A pandas DataFrame or numpy array containing the feature and target data.
+        target: A pandas Series or numpy array containing the target data.
+        feature: A string representing the name of the feature to calculate the Gini score for.
+        random_state: An integer representing the random state for the Logistic Regression estimator.
+        class_weight: A string or dictionary representing the class weight for the Logistic Regression estimator.
+        cv: An integer representing the number of cross-validation folds to use.
+        scoring: A string representing the scoring metric to use for cross-validation.
+        n_jobs: An integer representing the number of parallel jobs to run during cross-validation.
+
+    Returns:
+        A float representing the Gini score for the given feature.
+    """
+
     scores = cross_val_score(
-        model,
-        x[var].values.reshape(-1, 1),
-        y,
+        estimator=LogisticRegression(
+            random_state=random_state,
+            class_weight=class_weight,
+            max_iter=1000,
+            n_jobs=n_jobs,
+            warm_start=True,
+        ),
+        X=data[var].values.reshape(-1, 1),
+        y=target,
         cv=cv,
         scoring=scoring,
         n_jobs=n_jobs,
@@ -53,9 +55,9 @@ def _calc_score(
     return (np.mean(scores) * 2 - 1) * 100
 
 
-def _check_features_gini_threshold(
-        x: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.Series, np.ndarray],
+def check_features_gini_threshold(
+        data: Union[pd.DataFrame, np.ndarray],
+        target: Union[pd.Series, np.ndarray],
         feature_names: List[str],
         gini_threshold: float,
         random_state: int,
@@ -64,42 +66,44 @@ def _check_features_gini_threshold(
         scoring: str,
         n_jobs: int
 ) -> List[str]:
-    """Check if a feature has a Gini score below a threshold.
-    Args:
-        x: DataFrame or numpy array.
-        y: Series or numpy array.
-        feature_names: List of features.
-        gini_threshold: Gini threshold.
-        random_state: Random state.
-        class_weight: Class weight.
-        cv: Number of folds.
-        c: Regularization parameter.
-        scoring: Scoring method.
-        n_jobs: Number of jobs.
-    Returns:
-        List of features with a Gini score below a threshold."""
+    """
+    Returns the list of feature names whose gini score is above the given threshold.
 
-    to_drop = [
+    Args:
+        data: The input data.
+        target: The target variable.
+        feature_names: The names of the features to check.
+        gini_threshold: The threshold to use for the gini score.
+        random_state: The random state to use for the cross-validation.
+        class_weight: The class weight to use for the model.
+        cv: The number of cross-validation folds.
+        scoring: The scoring function to use for the cross-validation.
+        n_jobs: The number of jobs to run in parallel for the cross-validation.
+
+    Returns:
+        A list of feature names whose gini score is above the given threshold.
+    """
+
+    features_to_drop = [
         feature_name
         for feature_name in feature_names
-        if _calc_score(
-            x=x,
-            y=y,
+        if calculate_gini_score(
+            data=data,
+            target=target,
             var=feature_name,
             random_state=random_state,
             class_weight=class_weight,
             cv=cv,
             n_jobs=n_jobs,
             scoring=scoring,
-        )
-           < gini_threshold
+        ) < gini_threshold
     ]
-    return [var for var in feature_names if var not in to_drop]
+    return [var for var in feature_names if var not in features_to_drop]
 
 
-def _check_correlation_threshold(
-        x: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.Series, np.ndarray],
+def check_correlation_threshold(
+        data: Union[pd.DataFrame, np.ndarray],
+        target: Union[pd.Series, np.ndarray],
         feature_names: List[str],
         corr_threshold: float,
         random_state: int,
@@ -108,84 +112,94 @@ def _check_correlation_threshold(
         n_jobs: int,
         scoring: str,
 ) -> List[str]:
-    """Check if a feature has a correlation score below a threshold.
+    """
+    Returns a list of uncorrelated features based on a given correlation
+    threshold and their respective scores.
 
     Args:
-        x: DataFrame or numpy array.
-        y: Series or numpy array.
-        feature_names: List of features.
-        corr_threshold: Correlation threshold.
-        random_state: Random state.
-        class_weight: Class weight.
-        cv: Number of folds.
-        c: Regularization parameter.
-        scoring: Scoring method.
-        n_jobs: Number of jobs.
+        data: The input data.
+        target: The target variable.
+        feature_names: The list of feature names to evaluate.
+        corr_threshold: The correlation threshold to use for evaluation.
+        random_state: The random state to use for evaluation.
+        class_weight: The class weight to use for evaluation.
+        cv: The number of cross-validation folds to use for evaluation.
+        n_jobs: The number of jobs to run in parallel for evaluation.
+        scoring: The scoring metric to use for evaluation.
 
     Returns:
-        List of features with a correlation score below a threshold.
+        A list of uncorrelated feature names based on their respective scores.
     """
 
-    iterator = product(feature_names, feature_names)
-    correlation = x[feature_names].corr()
-    for var_a, var_b in iterator:
-        if (var_a != var_b) and (var_a in feature_names) and (var_b in feature_names) and abs(
-                correlation[var_a][var_b]
-        ) >= corr_threshold:
-            if _calc_score(
-                x=x,
-                y=y,
-                var=var_a,
+    correlation_matrix = data[feature_names].corr()
+    for feature_a, feature_b in product(feature_names, feature_names):
+        if (
+            feature_a != feature_b
+            and feature_a in feature_names
+            and feature_b in feature_names
+            and abs(correlation_matrix[feature_a][feature_b]) >= corr_threshold
+        ):
+            score_a = calculate_gini_score(
+                data=data,
+                target=target,
+                var=feature_a,
                 random_state=random_state,
                 class_weight=class_weight,
                 cv=cv,
                 n_jobs=n_jobs,
-                scoring=scoring,
-            ) > _calc_score(
-                    x=x,
-                    y=y,
-                    var=var_b,
-                    random_state=random_state,
-                    class_weight=class_weight,
-                    cv=cv,
-                    n_jobs=n_jobs,
-                    scoring=scoring,
-                ):
-                feature_names.remove(var_b)
+                scoring=scoring
+            )
+            score_b = calculate_gini_score(
+                data=data,
+                target=target,
+                var=feature_b,
+                random_state=random_state,
+                class_weight=class_weight,
+                cv=cv,
+                n_jobs=n_jobs,
+                scoring=scoring
+            )
+            if score_a > score_b:
+                feature_names.remove(feature_b)
             else:
-                feature_names.remove(var_a)
+                feature_names.remove(feature_a)
     return feature_names
 
 
-def _check_min_pct_group(
-    x: Union[pd.DataFrame, np.ndarray],
+def check_min_pct_group(
+    data: Union[pd.DataFrame, np.ndarray],
     feature_names: List[str],
     min_pct_group: float,
 ) -> List[str]:
-    """Check if a feature has a minimum percentage of values below a threshold.
+    """
+    Check if a feature has a minimum percentage of values below a threshold.
+
     Args:
-        x: DataFrame or numpy array.
+        data: DataFrame or numpy array.
         feature_names: List of features.
         min_pct_group: Minimum percentage of values below a threshold.
+
     Returns:
-        List of features with a minimum percentage of values below a threshold."""
-    
-    to_drop = [
-        feature_name for feature_name in feature_names if
-        x[feature_name].value_counts(normalize=True).min() < min_pct_group
+        List of features with a minimum percentage of values below a threshold.
+    """
+
+    return [
+        feature_name for feature_name in feature_names 
+        if feature_name not in [
+            feature_name for feature_name in feature_names 
+            if data[feature_name].value_counts(normalize=True).min() < min_pct_group
+        ]
     ]
-    return [var for var in feature_names if var not in to_drop]
 
 
-def _find_bad_features(
-    model: Model
-) -> List[int]:
+def find_bad_features(model: Model) -> List[int]:
     """Find features with high p-values and positive sign.
     Args:
         model: Model.
     Returns:
         List of features with high p-values and positive sign.
     """
+
     return [
         i
         for i in range(len(model.feature_names_))
@@ -193,15 +207,29 @@ def _find_bad_features(
     ]
 
 
-def _calc_iv_dict(data: pd.DataFrame, target: np.ndarray, feature: str) -> Dict:
-    _iv = 0
-    for value in data[feature].sort_values().unique():
-        bad = target[data[feature] == value].sum()
-        good = len(target[data[feature] == value]) - bad
-        all_bad = target.sum()
-        all_good = len(target) - all_bad
-        _iv += ((good / all_good) - (bad / all_bad)) * value
-    return {feature: _iv}
+def calc_iv_dict(data: pd.DataFrame, target: np.ndarray, feature: str) -> Dict:
+    """Calculate the information value (IV) of a categorical feature.
+
+    Args:
+        data: A pandas DataFrame containing the feature and target columns.
+        target: A numpy array of binary labels (0 for good, 1 for bad).
+        feature: A string with the name of the categorical feature.
+
+    Returns:
+        A dictionary with the feature name as key and the IV as value.
+    """
+
+    values = data[feature].values
+    unique_values, value_counts = np.unique(values, return_counts=True)
+    bad = np.zeros_like(unique_values)
+    good = np.zeros_like(unique_values)
+    for i, value in enumerate(unique_values):
+        bad[i] = target[values == value].sum()
+        good[i] = value_counts[i] - bad[i]
+    all_bad = target.sum()
+    all_good = len(target) - all_bad
+    iv = ((good / all_good) - (bad / all_bad)) * unique_values
+    return {feature: iv.sum()}
 
 
 def save_reports(

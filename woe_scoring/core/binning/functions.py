@@ -242,7 +242,6 @@ def _calc_stats(
     }
 
 
-# @jit(nopython=True)
 def _bin_bad_rates(
         x: np.ndarray, y: np.ndarray, bins: List, cat: bool = False, refit_fl: bool = False
 ) -> Tuple[List[Dict], np.ndarray]:
