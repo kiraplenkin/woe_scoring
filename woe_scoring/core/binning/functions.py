@@ -166,7 +166,7 @@ def _merge_bins_iv(x, y: np.ndarray, bad_rates: List[Dict], bins: List):
 
 
 def _merge_bins_min_pct(
-        x, y: np.ndarray, bad_rates: List[Dict], bins: List, cat: bool = False
+    x, y: np.ndarray, bad_rates: List[Dict], bins: List, cat: bool = False
 ):
     idx = [bad_rates[i]["pct"] for i in range(len(bad_rates))].index(
         min(bad_rate["pct"] for bad_rate in bad_rates)
@@ -194,7 +194,7 @@ def _merge_bins_min_pct(
     bad_rates, _ = _bin_bad_rates(x, y, bins, cat=cat)
     if cat:
         bins = [bad_rate["bin"] for bad_rate in bad_rates]
-    return bad_rates, 
+    return bad_rates, bins
 
 
 def _calc_stats(
