@@ -9,11 +9,10 @@ from sklearn.utils.multiclass import unique_labels
 
 from .binning.functions import (cat_processing, find_cat_features,
                                 num_processing, prepare_data, refit)
-from .model.functions import (check_correlation_threshold,
-                              generate_sql, save_reports, check_min_pct_group, check_features_gini_threshold,
-                              save_scorecard_fn, find_bad_features)
-from .model.selector import FeatureSelector
+from .model.functions import (calc_features_gini_quality, check_correlation_threshold, check_features_gini_threshold,
+                              check_min_pct_group, find_bad_features, generate_sql, save_reports, save_scorecard_fn)
 from .model.model import Model
+from .model.selector import FeatureSelector
 
 
 class NpEncoder(json.JSONEncoder):
@@ -60,7 +59,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         diff_woe_threshold: Minimum WOE difference allowed between any two adjacent bins for each feature. Defaults to 0.05.
         safe_original_data: Whether to keep a copy of the original data. Defaults to False.
     """
-    
+
     def __init__(
             self,
             max_bins: Union[int, float] = 10,
@@ -89,7 +88,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         self.woe_iv_dict = []
         self.feature_names = []
         self.num_features = []
-
 
     def fit(self, data: pd.DataFrame, target: Union[pd.Series, np.ndarray]) -> None:
         """
@@ -141,7 +139,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
 
         self.woe_iv_dict += num_features_res
 
-
     def transform(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Transforms the input DataFrame using the Weight of Evidence (WOE) technique.
@@ -152,7 +149,7 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         Returns:
             pd.DataFrame: The transformed DataFrame.
         """
-        
+
         data = data.copy()
         for i, woe_iv in enumerate(self.woe_iv_dict):
             feature = list(woe_iv)[0]
@@ -184,7 +181,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
                 del data[feature]
         return data
 
-
     def save_to_file(self, file_path: str) -> None:
         """
         Save the woe_iv_dict to a JSON file at the specified file path.
@@ -198,7 +194,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         with open(file_path, "w") as f:
             json.dump(self.woe_iv_dict, f, indent=4, cls=NpEncoder)
 
-
     def load_woe_iv_dict(self, file_path: str) -> None:
         """
         Load a dictionary of WoE and IV values from a JSON file.
@@ -211,7 +206,6 @@ class WOETransformer(BaseEstimator, TransformerMixin):
         """
         with open(file_path, "r") as json_file:
             self.woe_iv_dict = json.load(json_file)
-
 
     def refit(self, data: pd.DataFrame, target: Union[pd.Series, np.ndarray]) -> None:
         """
@@ -262,24 +256,24 @@ class CreateModel(BaseEstimator, TransformerMixin):
     """
 
     def __init__(
-        self,
-        selection_method: str = 'rfe',
-        model_type: str = 'sklearn',
-        max_vars: Union[int, float, None] = None,
-        special_cols: List[str] = None,
-        unused_cols: List[str] = None,
-        n_jobs: int = 1,
-        gini_threshold: float = 5.0,
-        iv_threshold: float = 0.05,
-        corr_threshold: float = 0.5,
-        min_pct_group: float = 0.05,
-        random_state: int = None,
-        class_weight: str = 'balanced',
-        direction: str = "forward",
-        cv: int = 3,
-        l1_exp_scale: int  = 4,
-        l1_grid_size: int = 20,
-        scoring: str = "roc_auc",
+            self,
+            selection_method: str = 'rfe',
+            model_type: str = 'sklearn',
+            max_vars: Union[int, float, None] = None,
+            special_cols: List[str] = None,
+            unused_cols: List[str] = None,
+            n_jobs: int = 1,
+            gini_threshold: float = 5.0,
+            iv_threshold: float = 0.05,
+            corr_threshold: float = 0.5,
+            min_pct_group: float = 0.05,
+            random_state: int = None,
+            class_weight: str = 'balanced',
+            direction: str = "forward",
+            cv: int = 3,
+            l1_exp_scale: int = 4,
+            l1_grid_size: int = 20,
+            scoring: str = "roc_auc",
     ):
         self.selection_method = selection_method
         self.model_type = model_type
@@ -299,6 +293,8 @@ class CreateModel(BaseEstimator, TransformerMixin):
         self.l1_grid_size = l1_grid_size
         self.scoring = scoring
 
+        self.features_gini_scores = {}
+
         self.coef_ = []
         self.intercept_ = None
         self.feature_names_ = []
@@ -306,7 +302,6 @@ class CreateModel(BaseEstimator, TransformerMixin):
         self.pvalues_ = []
 
         self.model = None
-
 
     def fit(self, data: pd.DataFrame, target: Union[pd.Series, np.ndarray]) -> None:
         """
@@ -332,18 +327,23 @@ class CreateModel(BaseEstimator, TransformerMixin):
             data=data, feature_names=self.feature_names_, min_pct_group=self.min_pct_group
         )
 
-        self.feature_names_ = check_features_gini_threshold(
+        self.features_gini_scores = calc_features_gini_quality(
             data=data,
             target=target,
             feature_names=self.feature_names_,
-            gini_threshold=self.gini_threshold,
-            random_state=self.random_state,
             class_weight=self.class_weight,
+            random_state=self.random_state,
+            n_jobs=self.n_jobs,
             cv=self.cv,
-            scoring=self.scoring,
-            n_jobs=self.n_jobs
+            scoring=self.scoring
         )
-        
+
+        self.feature_names_ = check_features_gini_threshold(
+            feature_names=self.feature_names_,
+            features_gini_scores=self.features_gini_scores,
+            gini_threshold=self.gini_threshold
+        )
+
         feature_selector = FeatureSelector(
             selection_type=self.selection_method,
             max_vars=self.max_vars,
@@ -355,10 +355,16 @@ class CreateModel(BaseEstimator, TransformerMixin):
             l1_exp_scale=self.l1_exp_scale,
             l1_grid_size=self.l1_grid_size,
             scoring=self.scoring,
-            gini_threshold=self.gini_threshold,
-            min_pct_group=self.min_pct_group,
             iv_threshold=self.iv_threshold
         )
+        selected_features = feature_selector.select(data, target, self.feature_names_)
+        selected_features = check_correlation_threshold(
+            data=data,
+            feature_names=selected_features,
+            features_gini_scores=self.features_gini_scores,
+            corr_threshold=self.corr_threshold,
+        )
+
         selected_model = Model(
             model_type=self.model_type,
             n_jobs=self.n_jobs,
@@ -369,38 +375,23 @@ class CreateModel(BaseEstimator, TransformerMixin):
             random_state=self.random_state,
             scoring=self.scoring
         )
-
-        selected_features = feature_selector.select(data, target, self.feature_names_)
-        selected_features = check_correlation_threshold(
-            data, target,
-            feature_names=selected_features,
-            corr_threshold=self.corr_threshold,
-            random_state=self.random_state,
-            class_weight=self.class_weight,
-            n_jobs=self.n_jobs,
-            cv=self.cv,
-            scoring=self.scoring,
-        )
         self.model = selected_model.get_model(data[selected_features], target)
 
         while True:
-            bad_feature_idx = find_bad_features(selected_model)
-            if len(bad_feature_idx) == 0:
+            bad_features = find_bad_features(selected_model)
+            if len(bad_features) == 0:
                 break
-            self.feature_names_ = [feature for feature in self.feature_names_ if feature not in [self.feature_names_[i] for i in bad_feature_idx]]
+            self.feature_names_ = [feature for feature in self.feature_names_ if
+                                   feature not in bad_features]
             selected_features = feature_selector.select(data, target, self.feature_names_)
             selected_features = check_correlation_threshold(
-                data, target,
+                data=data,
                 feature_names=selected_features,
-                corr_threshold=self.corr_threshold,
-                random_state=self.random_state,
-                class_weight=self.class_weight,
-                n_jobs=self.n_jobs,
-                cv=self.cv,
-                scoring=self.scoring,
+                features_gini_scores=self.features_gini_scores,
+                corr_threshold=self.corr_threshold
             )
             self.model = selected_model.get_model(data[selected_features], target)
-        
+
         self.coef_ = selected_model.coef_
         self.intercept_ = selected_model.intercept_
         self.feature_names_ = selected_model.feature_names_
@@ -409,16 +400,14 @@ class CreateModel(BaseEstimator, TransformerMixin):
 
         return self.model
 
-
     def save_reports(self, path: str):
         save_reports(self.model, path)
 
     def predict_proba(self, data: pd.DataFrame) -> np.ndarray:
         return self.model.predict_proba(data)
-        
+
     def predict(self, data: pd.DataFrame) -> np.ndarray:
         return self.model.predict(data)
-
 
     def generate_sql(self, encoder) -> str:
         return generate_sql(
