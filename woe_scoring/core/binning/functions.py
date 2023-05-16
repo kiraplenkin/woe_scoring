@@ -63,106 +63,98 @@ def _find_index_of_diff_flag(bad_rates: List[Dict]) -> int:
     )
 
 
-def _merge_bins_chi(x, y: np.ndarray, bad_rates: List[Dict], bins: List):
+def _merge_bins_chi(x, y: np.ndarray, bad_rates: List[Dict], bins: List) -> List[Dict]:
+    """Merge the bins with the chi-squared statistic.
+    Args:
+        x (pd.DataFrame): Input data.
+        y (np.ndarray): Output data.
+        bad_rates (List[Dict]): List of bad rates.
+        bins (List): List of bins.
+    Returns:
+        List[Dict]: List of bad rates."""
+
     idx = _find_index_of_diff_flag(bad_rates)
     if idx == 0:
         del bins[1]
     elif idx == len(bad_rates) - 2:
         del bins[len(bins) - 2]
     else:
-        temp_bins = copy.deepcopy(bins)
-        del temp_bins[idx + 1]
-        temp_bad_rates, temp_overall_rate = _bin_bad_rates(x, y, temp_bins)
-        chi_1 = _chi2(temp_bad_rates, temp_overall_rate)
-        del temp_bins
-
-        temp_bins = copy.deepcopy(bins)
-        del temp_bins[idx + 2]
-        temp_bad_rates, temp_overall_rate = _bin_bad_rates(x, y, temp_bins)
-        chi_2 = _chi2(temp_bad_rates, temp_overall_rate)
-        if chi_1 < chi_2:
-            del bins[idx + 1]
-        else:
-            del bins[idx + 2]
+        _extract_bin_by_chi2(bins, idx, x, y)
     bad_rates, _ = _bin_bad_rates(x, y, bins)
     return bad_rates, bins
 
 
-# def _extract_bin_by_chi2(bins, idx, x, y) -> None:
-#     """Extract the bins with the chi-squared statistic.
-#     Args:
-#         bins (List[Dict]): List of bins.
-#         idx (int): Index of the bad rate with the smallest difference in woe.
-#         x (pd.DataFrame): Input data.
-#         y (np.ndarray): Output data.
-#     Returns:
-#         None."""
+def _extract_bin_by_chi2(bins, idx, x, y) -> None:
+    """Extract the bins with the chi-squared statistic.
+    Args:
+        bins (List[Dict]): List of bins.
+        idx (int): Index of the bad rate with the smallest difference in woe.
+        x (pd.DataFrame): Input data.
+        y (np.ndarray): Output data.
+    Returns:
+        None."""
 
-#     temp_bins = copy.deepcopy(bins)
-#     del temp_bins[idx + 1]
-#     temp_bad_rates, temp_overall_rate = _bin_bad_rates(x, y, temp_bins)
-#     chi_1 = _chi2(temp_bad_rates, temp_overall_rate)
-#     del temp_bins
+    temp_bins = copy.deepcopy(bins)
+    del temp_bins[idx + 1]
+    temp_bad_rates, temp_overall_rate = _bin_bad_rates(x, y, temp_bins)
+    chi_1 = _chi2(temp_bad_rates, temp_overall_rate)
+    del temp_bins
 
-#     temp_bins = copy.deepcopy(bins)
-#     del temp_bins[idx + 2]
-#     temp_bad_rates, temp_overall_rate = _bin_bad_rates(x, y, temp_bins)
-#     chi_2 = _chi2(temp_bad_rates, temp_overall_rate)
-#     if chi_1 < chi_2:
-#         del bins[idx + 1]
-#     else:
-#         del bins[idx + 2]
+    temp_bins = copy.deepcopy(bins)
+    del temp_bins[idx + 2]
+    temp_bad_rates, temp_overall_rate = _bin_bad_rates(x, y, temp_bins)
+    chi_2 = _chi2(temp_bad_rates, temp_overall_rate)
+    if chi_1 < chi_2:
+        del bins[idx + 1]
+    else:
+        del bins[idx + 2]
 
 
-def _merge_bins_iv(x, y: np.ndarray, bad_rates: List[Dict], bins: List):
+def _merge_bins_iv(x, y: np.ndarray, bad_rates: List[Dict], bins: List) -> List[Dict]:
+    """Merge the bins with the IV statistic.
+    Args:
+        x (pd.DataFrame): Input data.
+        y (np.ndarray): Output data.
+        bad_rates (List[Dict]): List of bad rates.
+        bins (List): List of bins.
+    Returns:
+        List[Dict]: List of bad rates."""
+
     idx = _find_index_of_diff_flag(bad_rates)
     if idx == 0:
         del bins[1]
     elif idx == len(bad_rates) - 2:
         del bins[len(bins) - 2]
     else:
-        temp_bins = copy.deepcopy(bins)
-        del temp_bins[idx + 1]
-        temp_bad_rates, _ = _bin_bad_rates(x, y, temp_bins)
-        iv_1 = sum(_bin["iv"] for _bin in temp_bad_rates)
-        del temp_bins
-
-        temp_bins = copy.deepcopy(bins)
-        del temp_bins[idx + 2]
-        temp_bad_rates, _ = _bin_bad_rates(x, y, temp_bins)
-        iv_2 = sum(_bin["iv"] for _bin in temp_bad_rates)
-        if iv_1 > iv_2:
-            del bins[idx + 1]
-        else:
-            del bins[idx + 2]
+        _extract_bin_by_iv(bins, idx, x, y)
     bad_rates, _ = _bin_bad_rates(x, y, bins)
     return bad_rates, bins
 
 
-# def _extract_bin_by_iv(bins, idx, x, y) -> None:
-#     """Extract the bins with the IV statistic.
-#     Args:
-#         bins (List[Dict]): List of bins.
-#         idx (int): Index of the bad rate with the smallest difference in woe.
-#         x (pd.DataFrame): Input data.
-#         y (np.ndarray): Output data.
-#     Returns:
-#         None."""
+def _extract_bin_by_iv(bins, idx, x, y) -> None:
+    """Extract the bins with the IV statistic.
+    Args:
+        bins (List[Dict]): List of bins.
+        idx (int): Index of the bad rate with the smallest difference in woe.
+        x (pd.DataFrame): Input data.
+        y (np.ndarray): Output data.
+    Returns:
+        None."""
 
-#     temp_bins = copy.deepcopy(bins)
-#     del temp_bins[idx + 1]
-#     temp_bad_rates, _ = _bin_bad_rates(x, y, temp_bins)
-#     iv_1 = sum(_bin["iv"] for _bin in temp_bad_rates)
-#     del temp_bins
+    temp_bins = copy.deepcopy(bins)
+    del temp_bins[idx + 1]
+    temp_bad_rates, _ = _bin_bad_rates(x, y, temp_bins)
+    iv_1 = sum(_bin["iv"] for _bin in temp_bad_rates)
+    del temp_bins
 
-#     temp_bins = copy.deepcopy(bins)
-#     del temp_bins[idx + 2]
-#     temp_bad_rates, _ = _bin_bad_rates(x, y, temp_bins)
-#     iv_2 = sum(_bin["iv"] for _bin in temp_bad_rates)
-#     if iv_1 > iv_2:
-#         del bins[idx + 1]
-#     else:
-#         del bins[idx + 2]
+    temp_bins = copy.deepcopy(bins)
+    del temp_bins[idx + 2]
+    temp_bad_rates, _ = _bin_bad_rates(x, y, temp_bins)
+    iv_2 = sum(_bin["iv"] for _bin in temp_bad_rates)
+    if iv_1 > iv_2:
+        del bins[idx + 1]
+    else:
+        del bins[idx + 2]
 
 
 def _merge_bins_min_pct(

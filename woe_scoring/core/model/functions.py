@@ -1,20 +1,21 @@
 import os
-from typing import List, Union, Dict
+from itertools import combinations
+from typing import Dict, List, Union
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
-from itertools import product
-from .model import Model
 from joblib import Parallel, delayed
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
+
+from .model import Model
 
 
 def calculate_gini_score(
         data: Union[pd.DataFrame, np.ndarray],
         target: Union[pd.Series, np.ndarray],
-        var: str,
+        feature: str,
         random_state: int,
         class_weight: str,
         cv: int,
@@ -46,7 +47,7 @@ def calculate_gini_score(
             n_jobs=n_jobs,
             warm_start=True,
         ),
-        X=data[var].values.reshape(-1, 1),
+        X=data[feature].values.reshape(-1, 1),
         y=target,
         cv=cv,
         scoring=scoring,
@@ -55,121 +56,104 @@ def calculate_gini_score(
     return (np.mean(scores) * 2 - 1) * 100
 
 
-def check_features_gini_threshold(
+def calc_features_gini_quality(
         data: Union[pd.DataFrame, np.ndarray],
         target: Union[pd.Series, np.ndarray],
         feature_names: List[str],
-        gini_threshold: float,
         random_state: int,
         class_weight: str,
         cv: int,
         scoring: str,
-        n_jobs: int
-) -> List[str]:
+        n_jobs: int,
+) -> Dict[str, float]:
     """
-    Returns the list of feature names whose gini score is above the given threshold.
+    Calculates the Gini quality of given features in data with respect to the target variable.
 
     Args:
-        data: The input data.
-        target: The target variable.
-        feature_names: The names of the features to check.
-        gini_threshold: The threshold to use for the gini score.
-        random_state: The random state to use for the cross-validation.
-        class_weight: The class weight to use for the model.
-        cv: The number of cross-validation folds.
-        scoring: The scoring function to use for the cross-validation.
-        n_jobs: The number of jobs to run in parallel for the cross-validation.
+        data (Union[pd.DataFrame, np.ndarray]): The dataset from which to calculate feature quality.
+        target (Union[pd.Series, np.ndarray]): The target variable.
+        feature_names (List[str]): The names of the features to be evaluated.
+        random_state (int): Seed used by the random number generator.
+        class_weight (str): Weights associated with classes in the form of a dictionary.
+        cv (int): Number of folds used for cross-validation.
+        scoring (str): The evaluation metric to score predictions.
+        n_jobs (int): Number of CPU cores used for parallelization.
 
     Returns:
-        A list of feature names whose gini score is above the given threshold.
+        Dict: A dictionary containing the calculated Gini quality of each feature.
     """
-
-    features_to_drop = [
-        feature_name
-        for feature_name in feature_names
-        if calculate_gini_score(
+    return {
+        feature_name: calculate_gini_score(
             data=data,
             target=target,
-            var=feature_name,
+            feature=feature_name,
             random_state=random_state,
             class_weight=class_weight,
             cv=cv,
-            n_jobs=n_jobs,
             scoring=scoring,
-        ) < gini_threshold
-    ]
-    return [var for var in feature_names if var not in features_to_drop]
+            n_jobs=n_jobs,
+        )
+        for feature_name in feature_names
+    }
+
+
+def check_features_gini_threshold(
+        feature_names: List[str],
+        features_gini_scores: Dict[str, float],
+        gini_threshold: float,
+) -> List[str]:
+    """
+    Check for the feature names whose Gini impurity is greater than or equal to a given threshold.
+
+    :param feature_names: A list of feature names.
+    :type feature_names: List[str]
+    :param features_gini_scores: A dictionary of feature names with their corresponding Gini impurity.
+    :type features_gini_scores: Dict[str, float]
+    :param gini_threshold: The minimum Gini impurity threshold to filter the features.
+    :type gini_threshold: float
+    :return: A filtered list of feature names whose Gini impurity is greater than or equal to the threshold.
+    :rtype: List[str]
+    """
+    return [feature_name for feature_name in feature_names if features_gini_scores[feature_name] >= gini_threshold]
 
 
 def check_correlation_threshold(
         data: Union[pd.DataFrame, np.ndarray],
-        target: Union[pd.Series, np.ndarray],
         feature_names: List[str],
-        corr_threshold: float,
-        random_state: int,
-        class_weight: str,
-        cv: int,
-        n_jobs: int,
-        scoring: str,
+        features_gini_scores: Dict[str, float],
+        corr_threshold: float
 ) -> List[str]:
     """
-    Returns a list of uncorrelated features based on a given correlation
-    threshold and their respective scores.
+    Check correlation matrix for features in given data, and return only uncorrelated
+    features with respect to given correlation threshold.
 
-    Args:
-        data: The input data.
-        target: The target variable.
-        feature_names: The list of feature names to evaluate.
-        corr_threshold: The correlation threshold to use for evaluation.
-        random_state: The random state to use for evaluation.
-        class_weight: The class weight to use for evaluation.
-        cv: The number of cross-validation folds to use for evaluation.
-        n_jobs: The number of jobs to run in parallel for evaluation.
-        scoring: The scoring metric to use for evaluation.
-
-    Returns:
-        A list of uncorrelated feature names based on their respective scores.
+    :param data: The data to check correlation matrix.
+    :type data: Union[pd.DataFrame, np.ndarray]
+    :param feature_names: The names of the features in the data.
+    :type feature_names: List[str]
+    :param features_gini_scores: The Gini indices of the features.
+    :type features_gini_scores: Dict[str, float]
+    :param corr_threshold: The correlation threshold to check against.
+    :type corr_threshold: float
+    :return: The uncorrelated feature names.
+    :rtype: List[str]
     """
-
     correlation_matrix = data[feature_names].corr()
-    for feature_a, feature_b in product(feature_names, feature_names):
-        if (
-            feature_a != feature_b
-            and feature_a in feature_names
-            and feature_b in feature_names
-            and abs(correlation_matrix[feature_a][feature_b]) >= corr_threshold
-        ):
-            score_a = calculate_gini_score(
-                data=data,
-                target=target,
-                var=feature_a,
-                random_state=random_state,
-                class_weight=class_weight,
-                cv=cv,
-                n_jobs=n_jobs,
-                scoring=scoring
-            )
-            score_b = calculate_gini_score(
-                data=data,
-                target=target,
-                var=feature_b,
-                random_state=random_state,
-                class_weight=class_weight,
-                cv=cv,
-                n_jobs=n_jobs,
-                scoring=scoring
-            )
-            if score_a > score_b:
-                feature_names.remove(feature_b)
+
+    uncorrelated_features = set(feature_names)
+    for feature_a, feature_b in combinations(feature_names, 2):
+        if abs(correlation_matrix[feature_a][feature_b]) >= corr_threshold:
+            if features_gini_scores[feature_a] > features_gini_scores[feature_b]:
+                uncorrelated_features.discard(feature_b)
             else:
-                feature_names.remove(feature_a)
-    return feature_names
+                uncorrelated_features.discard(feature_a)
+    return list(uncorrelated_features)
 
 
 def check_min_pct_group(
-    data: Union[pd.DataFrame, np.ndarray],
-    feature_names: List[str],
-    min_pct_group: float,
+        data: Union[pd.DataFrame, np.ndarray],
+        feature_names: List[str],
+        min_pct_group: float,
 ) -> List[str]:
     """
     Check if a feature has a minimum percentage of values below a threshold.
@@ -182,14 +166,11 @@ def check_min_pct_group(
     Returns:
         List of features with a minimum percentage of values below a threshold.
     """
-
-    return [
-        feature_name for feature_name in feature_names 
-        if feature_name not in [
-            feature_name for feature_name in feature_names 
-            if data[feature_name].value_counts(normalize=True).min() < min_pct_group
-        ]
+    features_to_drop = [
+        feature_name for feature_name in feature_names
+        if data[feature_name].value_counts(normalize=True).min() < min_pct_group
     ]
+    return list(set(feature_names) - set(features_to_drop))
 
 
 def find_bad_features(model: Model) -> List[int]:
@@ -201,8 +182,8 @@ def find_bad_features(model: Model) -> List[int]:
     """
 
     return [
-        i
-        for i in range(len(model.feature_names_))
+        feature
+        for i, feature in enumerate(model.feature_names_)
         if model.pvalues_[i] > 0.05 or model.coef_[i] > 0
     ]
 
@@ -343,13 +324,13 @@ def _calc_score_points(woe, coef, intercept, factor, offset: float, n_features: 
 
 
 def _calc_stats_for_feature(
-    idx,
-    feature,
-    feature_names: List[str],
-    encoder,
-    model_results,
-    factor: float,
-    offset: float,
+        idx,
+        feature,
+        feature_names: List[str],
+        encoder,
+        model_results,
+        factor: float,
+        offset: float,
 ) -> pd.DataFrame:
     """Calculate stats for feature.
     Args:
