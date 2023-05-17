@@ -655,8 +655,12 @@ def _refit_woe_dict(
 
     cat = type_feature == "cat"
     if cat:
-        na_value = -1.0 if np.issubdtype(x.dtype, np.floating) else "Missing"
-        x[np.isnan(x)] = na_value
+        na_value = (
+            -1.0
+            if np.issubdtype(x.dtype, np.floating) or np.issubdtype(x.dtype, np.integer)
+            else "Missing"
+        )
+        x[pd.isna(x)] = na_value
     elif missing_bin == "first":
         na_value = np.nanmin(x[~np.isnan(x)]) - 1
         x[np.isnan(x)] = na_value
@@ -669,7 +673,6 @@ def _refit_woe_dict(
 
 def refit(x, y: np.ndarray, bins: List, type_feature: str, missing_bin: str) -> Dict:
     """Refit woe dict.
-
     Args:
         x: feature
         y: target

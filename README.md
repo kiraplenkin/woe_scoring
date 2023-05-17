@@ -16,7 +16,7 @@ from woe_scoring import WOETransformer
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 
-df = pd.read_csv('titanic_data.csv')
+df = pd.read_csv("titanic_data.csv")
 train, test = train_test_split(
     df, test_size=0.3, random_state=42, stratify=df["Survived"]
 )
@@ -44,11 +44,14 @@ encoder = WOETransformer(
     cat_features=cat_cols,
     special_cols=special_cols,
     n_jobs=-1,
-    merge_type='chi2',
+    merge_type="chi2",
 )
 
 encoder.fit(train, train["Survived"])
-encoder.save("train_dict.json")
+encoder.save_to_file("train_dict.json")
+
+encoder.load_woe_iv_dict("train_dict.json")
+encoder.refit(train, train["Survived"])
 
 enc_train = encoder.transform(train)
 enc_test = encoder.transform(test)
@@ -64,7 +67,7 @@ import pandas as pd
 from woe_scoring import CreateModel
 from sklearn.model_selection import train_test_split
 
-df = pd.read_csv('titanic_data.csv')
+df = pd.read_csv("titanic_data.csv")
 train, test = train_test_split(
     df, test_size=0.3, random_state=42, stratify=df["Survived"]
 )
@@ -78,14 +81,19 @@ special_cols = [
 ]
 
 model = CreateModel(
-    max_vars=0.8,
+    max_vars=5,
     special_cols=special_cols,
+    selection_method="sfs",
+    model_type="sklearn",
+    gini_threshold=5.0,
     n_jobs=-1,
     random_state=42,
-    class_weight='balanced',
+    class_weight="balanced",
     cv=3,
 )
 model.fit(train, train["Survived"])
-model.save_reports("/")
 test_proba = model.predict_proba(test[model.feature_names_])
+
+print(model.coef_, model.intercept_)
+print(model.feature_names_)
 ```
