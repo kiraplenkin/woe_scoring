@@ -43,7 +43,7 @@ class TestSimpleTransformer(unittest.TestCase):
         self.assertEqual(self.transformer.prefix, "WOE_")
         self.assertEqual(self.transformer.merge_type, "chi2")
         self.assertEqual(self.transformer.cat_features, [])
-        self.assertEqual(self.transformer.special_cols, [])
+        self.assertIsNone(self.transformer.special_cols)
         self.assertEqual(self.transformer.cat_features_threshold, 0)
         self.assertEqual(self.transformer.diff_woe_threshold, 0.05)
         self.assertEqual(self.transformer.safe_original_data, False)
