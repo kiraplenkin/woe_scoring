@@ -125,55 +125,37 @@ class FeatureSelector:
         # Make a copy of the list to avoid modifying the original
         selected_features = list(feature_names)
         
+        # VIF requires at least two features to detect multicollinearity
+        if len(selected_features) < 2:
+            return selected_features
+        
         while len(selected_features) > 1:
             # Create a dataframe with current features and a constant for intercept
             X = data[selected_features].copy()
-            # Handle potential NaNs by filling with 0 or mean (though WOE data shouldn't have NaNs)
             X = X.fillna(0)
             X['const'] = 1
             
-            # Calculate VIF for each feature (excluding const)
-            vif_data = pd.DataFrame()
-            vif_data["feature"] = selected_features
+            try:
+                # Calculate VIF for each feature
+                vif_values = [
+                    variance_inflation_factor(X.values, i)
+                    for i in range(len(selected_features))
+                ]
+            except Exception:
+                # Fallback if matrix is singular or other calculation issues occur
+                break
             
-            # Index of features in X matches index in selected_features (0 to N-1)
-            # 'const' is at index N
-            vif_data["VIF"] = [
-                variance_inflation_factor(X.values, i)
-                for i in range(len(selected_features))
-            ]
-            
-            # Find max VIF
-            max_vif = vif_data["VIF"].max()
+            max_vif = max(vif_values)
             
             # If max VIF is below threshold, we are done
             if max_vif < self.vif_threshold:
                 break
                 
             # Otherwise, remove the feature with max VIF
-            feature_to_remove = vif_data.loc[vif_data["VIF"] == max_vif, "feature"].values[0]
-            selected_features.remove(feature_to_remove)
-            
-            # Check if we hit max_vars limit (optional: could also enforce this post-loop)
-            if self.max_vars and len(selected_features) <= self.max_vars:
-                # If we need to reduce further to meet max_vars, VIF alone might not be the best criterion 
-                # (it removes correlated features, not necessarily least predictive ones). 
-                # However, typically VIF is a preprocessing step.
-                # Here we strictly follow VIF threshold logic.
-                pass
+            idx_to_remove = vif_values.index(max_vif)
+            selected_features.pop(idx_to_remove)
 
-        # If max_vars is specified and we still have too many features, 
-        # we might need to cut more? 
-        # But VIF is about correlation. Let's just return what passed the threshold.
-        # If user wants strict max_vars, they should probably use SFS/RFE after VIF.
-        # However, to respect the interface:
-        if self.max_vars and len(selected_features) > self.max_vars:
-             # Just truncate? Or warn? Truncating arbitrary features is bad.
-             # Let's keep all valid features and let the user handle max_vars via another method if needed.
-             # Or, strictly speaking, this method primarily filters by VIF.
-             pass
-
-        return selected_features
+        return selected_features[:self.max_vars] if self.max_vars else selected_features
 
 
     def _select_by_iv(self, data: pd.DataFrame, target: Union[pd.Series, np.ndarray], feature_names: List[str]) -> List[str]:
